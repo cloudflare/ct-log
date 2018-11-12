@@ -37,6 +37,7 @@ type Local struct {
 	db *bbolt.DB
 }
 
+// NewLocal returns a new local database, with data stored at `path`.
 func NewLocal(path string) (*Local, error) {
 	db, err := bbolt.Open(path, 0777, &bbolt.Options{})
 	if err != nil {

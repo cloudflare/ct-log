@@ -1016,6 +1016,14 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/google/readahead",
+			"repository": "https://github.com/google/readahead",
+			"vcs": "git",
+			"revision": "eaceba16903255cb149d1efc316f6cc83d765268",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/google/trillian",
 			"repository": "https://github.com/google/trillian",
 			"vcs": "git",
@@ -1090,6 +1098,22 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/gosuri/uilive",
+			"repository": "https://github.com/gosuri/uilive",
+			"vcs": "git",
+			"revision": "ac356e6e42cd31fcef8e6aec13ae9ed6fe87713e",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/gosuri/uiprogress",
+			"repository": "https://github.com/gosuri/uiprogress",
+			"vcs": "git",
+			"revision": "d0567a9d84a1c40dd7568115ea66f4887bf57b33",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/grpc-ecosystem/go-grpc-middleware",
 			"repository": "https://github.com/grpc-ecosystem/go-grpc-middleware",
 			"vcs": "git",
@@ -1160,6 +1184,14 @@
 			"repository": "https://github.com/jessevdk/go-assets",
 			"vcs": "git",
 			"revision": "4f4301a06e153ff90e17793577ab6bf79f8dc5c5",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/jessevdk/go-flags",
+			"repository": "https://github.com/jessevdk/go-flags",
+			"vcs": "git",
+			"revision": "5de817a9aa209ed35a164cb04aec82b7df1a47a6",
 			"branch": "master",
 			"notests": true
 		},
@@ -1604,6 +1636,24 @@
 			"revision": "792786c7400a136282c1664665ae0a8db921c6c2",
 			"branch": "master",
 			"path": "/difflib",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/pquerna/ffjson/ffjson",
+			"repository": "https://github.com/pquerna/ffjson",
+			"vcs": "git",
+			"revision": "e517b90714f7c0eabe6d2e570a5886ae077d6db6",
+			"branch": "master",
+			"path": "/ffjson",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/pquerna/ffjson/fflib/v1",
+			"repository": "https://github.com/pquerna/ffjson",
+			"vcs": "git",
+			"revision": "e517b90714f7c0eabe6d2e570a5886ae077d6db6",
+			"branch": "master",
+			"path": "fflib/v1",
 			"notests": true
 		},
 		{
@@ -2966,6 +3016,14 @@
 			"repository": "https://gopkg.in/inconshreveable/log15.v2",
 			"vcs": "git",
 			"revision": "67afb5ed74ec82fd7ac8f49d27c509ac6f991970",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "gopkg.in/kothar/go-backblaze.v0",
+			"repository": "https://gopkg.in/kothar/go-backblaze.v0",
+			"vcs": "git",
+			"revision": "9ac0cf0dab1a77a5c25e0e38e6b8e493385f1add",
 			"branch": "master",
 			"notests": true
 		},
