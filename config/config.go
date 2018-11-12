@@ -117,7 +117,7 @@ func FromFile(path string) (*Config, error) {
 		return nil, fmt.Errorf("no logs found in config file")
 	}
 
-	// Verify that all log ids / kafka topics are distinct and well-formed.
+	// Verify that all log ids are distinct and well-formed.
 	for i, meta := range parsed.Logs {
 		if meta.LogId <= 0 {
 			return nil, fmt.Errorf("log #%v in config file: log cannot have id %v", i+1, meta.LogId)
