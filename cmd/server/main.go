@@ -6,19 +6,17 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"strings"
 	"syscall"
 
-	"github.com/cloudflare/ct-log/b2"
 	"github.com/cloudflare/ct-log/config"
 	"github.com/cloudflare/ct-log/ct"
+	"github.com/cloudflare/ct-log/custom"
 
 	"github.com/golang/glog"
 	"github.com/golang/protobuf/proto"
@@ -34,6 +32,8 @@ import (
 	"github.com/google/trillian/util"
 	"golang.org/x/net/netutil"
 
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+
 	// Register PEMKeyFile, PrivateKey and PKCS11Config ProtoHandlers
 	_ "github.com/google/trillian/crypto/keys/der/proto"
 	_ "github.com/google/trillian/crypto/keys/pem/proto"
@@ -41,6 +41,9 @@ import (
 )
 
 var (
+	Version   = "dev"
+	GoVersion = runtime.Version()
+
 	configFile = flag.String("cfg", "", "Path to a YAML config file.")
 )
 
@@ -60,63 +63,40 @@ func main() {
 	glog.CopyStandardLogTo("WARNING")
 	glog.Info("**** CT HTTP Server Starting ****")
 
-	// Connect to databases: Postgres, Kafka, HBase.
-	psql, err := pdx.NewPostgres(cfg.PostgresDSN)
+	// Connect to databases.
+	local, err := custom.NewLocal(cfg.BoltPath)
 	if err != nil {
-		glog.Exitf("failed to connect to postgres: %v", err)
+		glog.Exitf("failed to open local database: %v", err)
 	}
-	defer psql.Close()
-
-	consumer, err := pdx.NewKafkaConsumer(cfg.KafkaBrokers, cfg.KafkaTopics)
+	remote, err := custom.NewRemote(cfg.B2AcctId, cfg.B2AppKey, cfg.B2Bucket, cfg.B2Url)
 	if err != nil {
-		glog.Exitf("failed to build kafka consumer: %v", err)
+		glog.Exitf("failed to open remote database: %v", err)
 	}
-	defer consumer.Close()
-
-	producer, err := pdx.NewKafkaProducer(cfg.KafkaBrokers, cfg.KafkaTopics)
-	if err != nil {
-		glog.Exitf("failed to build kafka producer: %v", err)
-	}
-	defer producer.Close()
-
-	watcher, err := pdx.NewKafkaWatcher(cfg.KafkaBrokers, cfg.KafkaTopics)
-	if err != nil {
-		glog.Exitf("failed to build kafka watcher: %v", err)
-	}
-	defer watcher.Close()
-
-	index, err := pdx.NewHBaseIndex(cfg.HBaseQuorum, cfg.HBaseRoot, cfg.HBaseSeqTable, cfg.HBaseTreeTable)
-	if err != nil {
-		glog.Exitf("failed to build hbase index: %v", err)
-	}
-	defer index.Close()
 
 	// Wrap our database connections in a struct that will implement
 	// storage.LogStorage over them.
 	logStorage := &ct.LogStorage{
-		Postgres: psql,
-		Consumer: consumer,
-		Producer: producer,
-		Index:    index,
+		Local:  local,
+		Remote: remote,
 
 		AdminStorage: cfg.AdminStorage,
 	}
 
-	// Initialize a quota manager and set it to watch the number of unsequenced
-	// leaves in all of our logs.
-	qm := ct.NewQuotaManager(cfg.MaxUnsequencedLeaves)
-	for _, logConfig := range cfg.LogConfigs {
-		if err := qm.WatchLog(psql, watcher, logConfig.LogId); err != nil {
-			glog.Exitf("failed to initialize quota: %v", err)
-		}
-	}
-	defer qm.Close()
+	// // Initialize a quota manager and set it to watch the number of unsequenced
+	// // leaves in all of our logs.
+	// qm := ct.NewQuotaManager(cfg.MaxUnsequencedLeaves)
+	// for _, logConfig := range cfg.LogConfigs {
+	// 	if err := qm.WatchLog(psql, watcher, logConfig.LogId); err != nil {
+	// 		glog.Exitf("failed to initialize quota: %v", err)
+	// 	}
+	// }
+	// defer qm.Close()
 
 	// Setup the log server.
 	registry := extension.Registry{
-		AdminStorage:  cfg.AdminStorage,
-		LogStorage:    logStorage,
-		QuotaManager:  qm,
+		AdminStorage: cfg.AdminStorage,
+		LogStorage:   logStorage,
+		// QuotaManager:  qm,
 		MetricFactory: prometheus.MetricFactory{},
 		NewKeyProto: func(ctx context.Context, spec *keyspb.Specification) (proto.Message, error) {
 			return der.NewProtoFromSpec(spec)
@@ -125,7 +105,7 @@ func main() {
 	ti := interceptor.New(registry.AdminStorage, registry.QuotaManager, false,
 		registry.MetricFactory)
 	logServer := trillianLogClient{
-		interceptor.Combine(interceptor.ErrorWrapper, ti.UnaryInterceptor),
+		grpc_middleware.ChainUnaryServer(interceptor.ErrorWrapper, ti.UnaryInterceptor),
 		server.NewTrillianLogRPCServer(registry, util.SystemTimeSource{}),
 	}
 
@@ -155,47 +135,42 @@ func main() {
 			glog.Exitf("failed to check if log is initialized: %#v: %v", i, err)
 		}
 
+		vcfg, err := ctfe.ValidateLogConfig(logConfig)
+		if err != nil {
+			glog.Exitf("failed to validate log config: %#v: %v", i, err)
+		}
 		opts := ctfe.InstanceOptions{
+			Validated:     vcfg,
+			Client:        logServer,
 			Deadline:      cfg.RequestTimeout,
 			MetricFactory: prometheus.MetricFactory{},
 			RequestLog:    new(ctfe.DefaultRequestLog),
 		}
-		handlers, err := ctfe.SetUpInstance(ctx, logServer, logConfig, opts)
+		handlers, err := ctfe.SetUpInstance(ctx, opts)
 		if err != nil {
 			glog.Exitf("failed to set up log #%v: %v", i, err)
 		}
-
 		for path, handler := range *handlers {
 			mux.Handle(path, handler)
-			if prefix := "/logs/microsoft"; strings.HasPrefix(path, prefix) {
-				mux.Handle("/logs/actalis"+path[len(prefix):], handler)
-				mux.Handle("/logs/primekey"+path[len(prefix):], handler)
-			}
 		}
-		mux.Handle(logConfig.Prefix+"/ct/v1/report-dropped", &droppedHandler{
-			logId:   logConfig.LogId,
-			storage: logStorage,
-		})
 	}
 	server := http.Server{Handler: cacheHandler{mux}}
 
 	// Start listening for client requests.
-	httpAddr := net.JoinHostPort(os.Getenv("HOST"), os.Getenv("PORT1"))
-	httpList, err := net.Listen("tcp", httpAddr)
+	httpList, err := net.Listen("tcp", cfg.ServerAddr)
 	if err != nil {
 		glog.Exit(err)
 	}
 	httpList = netutil.LimitListener(httpList, cfg.MaxClients)
 
 	// Start listening for connections from the prometheus server.
-	metricsAddr := net.JoinHostPort(os.Getenv("HOST"), os.Getenv("PORT0"))
-	metricsList, err := net.Listen("tcp", metricsAddr)
+	metricsList, err := net.Listen("tcp", cfg.MetricsAddr)
 	if err != nil {
 		glog.Exit(err)
 	}
 
 	// Spin off main threads of work.
-	go metrics(consumer, qm, metricsList)
+	go metrics(metricsList)
 	go func() {
 		glog.Exit(server.Serve(httpList))
 	}()
@@ -210,4 +185,31 @@ func awaitSignal() {
 	sig := <-sigs
 	glog.Warningf("Signal received: %v", sig)
 	glog.Flush()
+}
+
+// cacheHandler sets the Cache-Control header on common, cache-able requests.
+type cacheHandler struct {
+	inner http.Handler
+}
+
+func (ch cacheHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
+	if ray := req.Header.Get("Cf-Ray"); ray != "" {
+		if i := strings.Index(ray, "-"); i != -1 {
+			reqsByColo.WithLabelValues(ray[i+1:]).Inc()
+		}
+	}
+
+	if req.Method == "GET" {
+		if req.URL.Path == "/" {
+			rw.Header().Set("Cache-Control", "public, max-age=14400")
+		} else if strings.HasSuffix(req.URL.Path, "/ct/v1/get-sth") {
+			rw.Header().Set("Cache-Control", "public, max-age=3600")
+		} else if strings.HasSuffix(req.URL.Path, "/ct/v1/get-roots") {
+			rw.Header().Set("Cache-Control", "public, max-age=14400")
+		} else {
+			rw.Header().Set("Cache-Control", "no-cache")
+		}
+	}
+
+	ch.inner.ServeHTTP(rw, req)
 }

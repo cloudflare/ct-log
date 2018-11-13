@@ -23,10 +23,15 @@ import (
 // file specifies the file format of our config. See config.dev.yml for
 // examles/annotations.
 type file struct {
+	ServerAddr  string `yaml:"server_addr"`
+	MetricsAddr string `yaml:"metrics_addr"`
+
 	BoltPath string `yaml:"bolt_path"`
 
 	B2AcctId string `yaml:"b2_acct_id"`
 	B2AppKey string `yaml:"b2_app_key"`
+	B2Bucket string `yaml:"b2_bucket"`
+	B2Url    string `yaml:"b2_url"`
 
 	MaxUnsequencedLeaves int64  `yaml:"max_unsequenced_leaves"`
 	MaxGetEntries        int64  `yaml:"max_get_entries"`
@@ -61,10 +66,15 @@ type logMeta struct {
 }
 
 type Config struct {
+	ServerAddr  string
+	MetricsAddr string
+
 	BoltPath string
 
 	B2AcctId string
 	B2AppKey string
+	B2Bucket string
+	B2Url    string
 
 	MaxUnsequencedLeaves int64
 	MaxGetEntries        int64
@@ -93,12 +103,22 @@ func FromFile(path string) (*Config, error) {
 		return nil, err
 	}
 
+	if len(parsed.ServerAddr) == 0 {
+		return nil, fmt.Errorf("no address for the server to listen on was found in config file")
+	} else if len(parsed.MetricsAddr) == 0 {
+		return nil, fmt.Errorf("no address to serve metrics on was found in config file")
+	}
+
 	if len(parsed.BoltPath) == 0 {
 		return nil, fmt.Errorf("boltdb path not found in config file")
 	} else if len(parsed.B2AcctId) == 0 {
 		return nil, fmt.Errorf("no backblaze account id found in config file")
 	} else if len(parsed.B2AppKey) == 0 {
 		return nil, fmt.Errorf("no backblaze application key found in config file")
+	} else if len(parsed.B2Bucket) == 0 {
+		return nil, fmt.Errorf("no backblaze bucket found in config file")
+	} else if len(parsed.B2Url) == 0 {
+		return nil, fmt.Errorf("no backblaze download url found in config file")
 	}
 
 	if parsed.MaxUnsequencedLeaves < 1 {
@@ -151,10 +171,15 @@ func FromFile(path string) (*Config, error) {
 	}
 
 	return &Config{
+		ServerAddr:  parsed.ServerAddr,
+		MetricsAddr: parsed.MetricsAddr,
+
 		BoltPath: parsed.BoltPath,
 
 		B2AcctId: parsed.B2AcctId,
 		B2AppKey: parsed.B2AppKey,
+		B2Bucket: parsed.B2Bucket,
+		B2Url:    parsed.B2Url,
 
 		MaxUnsequencedLeaves: parsed.MaxUnsequencedLeaves,
 		MaxGetEntries:        parsed.MaxGetEntries,
