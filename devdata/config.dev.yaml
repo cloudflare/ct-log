@@ -5,12 +5,12 @@ metrics_addr: 127.0.0.1:4000
 server_addr: 0.0.0.0:4001
 # cert_file and key_file are optional fields. If given, they're assumed to be a
 # PEM-encoded cert and private key, and will be used for TLS on server_addr.
-cert_file: ./cert.pem
-key_file: ./key.pem
+# cert_file: ./cert.pem
+# key_file: ./key.pem
 
 # bolt_path is a directory where we'll store metadata and indices about the logs
 # in a LevelDB-type database.
-bolt_path: ./ct-data
+bolt_path: ./ct-data.db
 
 # b2_acct_id is the Account ID of a Backblaze B2 account. This, as well as all
 # B2-related config below, will expand environment variables at runtime.

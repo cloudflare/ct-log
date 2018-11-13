@@ -39,7 +39,7 @@ type Local struct {
 
 // NewLocal returns a new local database, with data stored at `path`.
 func NewLocal(path string) (*Local, error) {
-	db, err := bbolt.Open(path, 0777, &bbolt.Options{})
+	db, err := bbolt.Open(path, 0600, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (l *Local) MostRecentRoot(treeID int64) (trillian.SignedLogRoot, frontier.F
 	}
 
 	root := types.LogRootV1{}
-	if err = gob.NewDecoder(bytes.NewBuffer(rootRaw)).Decode(&root); err != nil {
+	if err = root.UnmarshalBinary(rootRaw); err != nil {
 		return trillian.SignedLogRoot{}, frontier.Frontier{}, err
 	}
 	sth := trillian.SignedLogRoot{
@@ -111,6 +111,25 @@ func (l *Local) QueueLeaves(treeID, queueTimestamp int64, leaves []*trillian.Log
 
 		return nil
 	})
+}
+
+// Unsequenced returns the number of unsequenced leaves that a log has on disk.
+func (l *Local) Unsequenced(treeID int64) (int, error) {
+	var keys int
+
+	err := l.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket(name("leaves", treeID))
+		if b == nil {
+			return storage.ErrTreeNeedsInit
+		}
+		keys = b.Stats().KeyN
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return keys, nil
 }
 
 // GetSequenceByMerkleHash returns the sequence numbers for the leaves with the
@@ -436,7 +455,7 @@ func (ltx *LocalTx) Commit() error {
 		// Execute queued actions in the transaction.
 		for _, act := range ltx.acts {
 			if err := act(tx); err != nil {
-				return nil
+				return err
 			}
 		}
 

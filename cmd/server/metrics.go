@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/pprof"
 
+	"github.com/cloudflare/ct-log/ct"
+
 	"github.com/golang/glog"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -28,12 +30,12 @@ var (
 	)
 )
 
-func metrics(metricsList net.Listener) {
+func metrics(qm *ct.QuotaManager, metricsList net.Listener) {
 	buildInfo.WithLabelValues(Version, GoVersion).Set(1)
 	prometheus.MustRegister(buildInfo)
 	prometheus.MustRegister(reqsByColo)
-	// prometheus.MustRegister(qm.NumLeaves)
-	// prometheus.MustRegister(qm.TreeSize)
+	prometheus.MustRegister(qm.TreeSize)
+	prometheus.MustRegister(qm.UnsequencedLeaves)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(rw http.ResponseWriter, req *http.Request) {

@@ -30,7 +30,8 @@ func (tlc trillianLogClient) {{ . }}(ctx context.Context,
 		}
 		return tlc.server.{{ . }}(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/{{ . }}"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}

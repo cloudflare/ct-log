@@ -30,7 +30,8 @@ func (tlc trillianLogClient) QueueLeaf(ctx context.Context,
 		}
 		return tlc.server.QueueLeaf(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/QueueLeaf"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +54,8 @@ func (tlc trillianLogClient) AddSequencedLeaf(ctx context.Context,
 		}
 		return tlc.server.AddSequencedLeaf(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/AddSequencedLeaf"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +78,8 @@ func (tlc trillianLogClient) GetInclusionProof(ctx context.Context,
 		}
 		return tlc.server.GetInclusionProof(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/GetInclusionProof"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +102,8 @@ func (tlc trillianLogClient) GetInclusionProofByHash(ctx context.Context,
 		}
 		return tlc.server.GetInclusionProofByHash(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/GetInclusionProofByHash"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +126,8 @@ func (tlc trillianLogClient) GetConsistencyProof(ctx context.Context,
 		}
 		return tlc.server.GetConsistencyProof(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/GetConsistencyProof"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +150,8 @@ func (tlc trillianLogClient) GetLatestSignedLogRoot(ctx context.Context,
 		}
 		return tlc.server.GetLatestSignedLogRoot(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/GetLatestSignedLogRoot"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +174,8 @@ func (tlc trillianLogClient) GetSequencedLeafCount(ctx context.Context,
 		}
 		return tlc.server.GetSequencedLeafCount(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/GetSequencedLeafCount"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +198,8 @@ func (tlc trillianLogClient) GetEntryAndProof(ctx context.Context,
 		}
 		return tlc.server.GetEntryAndProof(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/GetEntryAndProof"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +222,8 @@ func (tlc trillianLogClient) InitLog(ctx context.Context,
 		}
 		return tlc.server.InitLog(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/InitLog"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +246,8 @@ func (tlc trillianLogClient) QueueLeaves(ctx context.Context,
 		}
 		return tlc.server.QueueLeaves(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/QueueLeaves"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +270,8 @@ func (tlc trillianLogClient) AddSequencedLeaves(ctx context.Context,
 		}
 		return tlc.server.AddSequencedLeaves(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/AddSequencedLeaves"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +294,8 @@ func (tlc trillianLogClient) GetLeavesByIndex(ctx context.Context,
 		}
 		return tlc.server.GetLeavesByIndex(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/GetLeavesByIndex"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +318,8 @@ func (tlc trillianLogClient) GetLeavesByRange(ctx context.Context,
 		}
 		return tlc.server.GetLeavesByRange(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/GetLeavesByRange"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}
@@ -329,7 +342,8 @@ func (tlc trillianLogClient) GetLeavesByHash(ctx context.Context,
 		}
 		return tlc.server.GetLeavesByHash(ctx, req)
 	}
-	temp, err := tlc.interceptor(ctx, req, nil, handler)
+	info := &grpc.UnaryServerInfo{FullMethod: "/trillian.TrillianLog/GetLeavesByHash"}
+	temp, err := tlc.interceptor(ctx, req, info, handler)
 	if err != nil {
 		return nil, err
 	}

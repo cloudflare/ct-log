@@ -47,6 +47,14 @@ var (
 	configFile = flag.String("cfg", "", "Path to a YAML config file.")
 )
 
+func init() {
+	flag.Usage = func() {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
+		fmt.Fprintln(flag.CommandLine.Output(), "-cfg string")
+		fmt.Fprintln(flag.CommandLine.Output(), "\tPath to a YAML config file.")
+	}
+}
+
 //go:generate go run ./../admin/gen-server-client/main.go
 
 func main() {
@@ -80,21 +88,18 @@ func main() {
 		AdminStorage: cfg.AdminStorage,
 	}
 
-	// // Initialize a quota manager and set it to watch the number of unsequenced
-	// // leaves in all of our logs.
-	// qm := ct.NewQuotaManager(cfg.MaxUnsequencedLeaves)
-	// for _, logConfig := range cfg.LogConfigs {
-	// 	if err := qm.WatchLog(psql, watcher, logConfig.LogId); err != nil {
-	// 		glog.Exitf("failed to initialize quota: %v", err)
-	// 	}
-	// }
-	// defer qm.Close()
+	// Initialize a quota manager and set it to watch the number of unsequenced
+	// leaves in all of our logs.
+	qm := ct.NewQuotaManager(cfg.MaxUnsequencedLeaves)
+	for _, logConfig := range cfg.LogConfigs {
+		qm.WatchLog(local, logConfig.LogId)
+	}
 
 	// Setup the log server.
 	registry := extension.Registry{
-		AdminStorage: cfg.AdminStorage,
-		LogStorage:   logStorage,
-		// QuotaManager:  qm,
+		AdminStorage:  cfg.AdminStorage,
+		LogStorage:    logStorage,
+		QuotaManager:  qm,
 		MetricFactory: prometheus.MetricFactory{},
 		NewKeyProto: func(ctx context.Context, spec *keyspb.Specification) (proto.Message, error) {
 			return der.NewProtoFromSpec(spec)
@@ -152,7 +157,7 @@ func main() {
 			mux.Handle(path, handler)
 		}
 	}
-	handler := cacheHandler{mux}
+	server := http.Server{Handler: cacheHandler{mux}}
 
 	// Start listening for client requests.
 	httpList, err := net.Listen("tcp", cfg.ServerAddr)
@@ -168,12 +173,13 @@ func main() {
 	}
 
 	// Spin off main threads of work.
-	go metrics(metricsList)
+	go metrics(qm, metricsList)
 	go func() {
 		if cfg.CertFile == "" {
-			glog.Exit(http.ListenAndServe(cfg.ServerAddr, handler))
+			glog.Exit(server.Serve(httpList))
+		} else {
+			glog.Exit(server.ServeTLS(httpList, cfg.CertFile, cfg.KeyFile))
 		}
-		glog.Exit(http.ListenAndServeTLS(cfg.ServerAddr, cfg.CertFile, cfg.KeyFile, handler))
 	}()
 	awaitSignal()
 }
