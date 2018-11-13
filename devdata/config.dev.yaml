@@ -1,0 +1,67 @@
+# metrics_addr is where we'll serve debugging endpoints and prometheus metrics.
+# It should be listening on localhost.
+metrics_addr: 127.0.0.1:4000
+# server_addr is where we'll expose the different logs configured below.
+server_addr: 0.0.0.0:4001
+# cert_file and key_file are optional fields. If given, they're assumed to be a
+# PEM-encoded cert and private key, and will be used for TLS on server_addr.
+cert_file: ./cert.pem
+key_file: ./key.pem
+
+# bolt_path is a directory where we'll store metadata and indices about the logs
+# in a LevelDB-type database.
+bolt_path: ./ct-data
+
+# b2_acct_id is the Account ID of a Backblaze B2 account. This, as well as all
+# B2-related config below, will expand environment variables at runtime.
+b2_acct_id: ${B2_ACCT_ID}
+# b2_app_key is the master application key of a Backblaze B2 account.
+b2_app_key: ${B2_APP_KEY}
+# b2_bucket is the name of the bucket where we should store log data. It should
+# be randomly chosen, so that people can't access your bucket directly.
+b2_bucket: ${B2_BUCKET}
+# b2_url is the 'Friendly URL' of your B2 bucket, without the trailing slash.
+b2_url: https://f002.backblazeb2.com/file/${B2_BUCKET}
+
+# max_unsequenced_leaves is the max number of unsequenced leaves to allow before
+# refusing to accept new leaves. Recommended value is: max signing rate * 6 hrs.
+max_unsequenced_leaves: 216000
+# max_clients is the maximum number of connections that the server should accept
+# from the internet. This prevents DoS through memory exhaustion.
+max_clients: 1024
+# request_timeout is the maximum amount of time to spend on one request.
+request_timeout: 30s
+
+# Signer-specific config.
+signer:
+  batch_size: 1024  # The max number of new leaves to incorporate per STH.
+  run_interval: 10s # How often to look for new leaves to sequence.
+
+logs:
+  - log_id: 1 # Should not be zero.
+    create_time: 2017-08-07 14:47:00 PDT
+    update_time: 2017-08-07 14:48:00 PDT
+
+    # Trillian config.
+    tree_state: ACTIVE # ACTIVE, FROZEN
+    sig_alg:    ECDSA  # RSA, ECDSA
+    max_root_duration: 6h # The max time between STHs.
+
+    # CT config.
+    prefix: # The prefix to require before the "/ct/v1/add-chain" or w/e.
+    roots_file: ./devdata/certs.dev/ca.pem
+
+    # $ openssl ecparam -name prime256v1 -genkey -noout -out log.key
+    # priv_key and pub_key will also expand environment variables at runtime.
+    priv_key: |
+      -----BEGIN EC PRIVATE KEY-----
+      MHcCAQEEICF4YReJqKAiIRQwVOGSTlrpbW67lasNTHFLRkfGSCA+oAoGCCqGSM49
+      AwEHoUQDQgAEj2UA5HrRweXroovKbrAmqAbJlmfQhWBgd7B5SfSVmuq6K36sq4Gv
+      xFLj2X5X9wCCUMv8G4W5NKr+4hLlfvyIng==
+      -----END EC PRIVATE KEY-----
+    # $ openssl ec -in log.key -pubout -out log.pub
+    pub_key: |
+      -----BEGIN PUBLIC KEY-----
+      MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEj2UA5HrRweXroovKbrAmqAbJlmfQ
+      hWBgd7B5SfSVmuq6K36sq4GvxFLj2X5X9wCCUMv8G4W5NKr+4hLlfvyIng==
+      -----END PUBLIC KEY-----

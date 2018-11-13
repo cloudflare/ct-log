@@ -56,8 +56,6 @@ func main() {
 	cfg, err := config.FromFile(*configFile)
 	if err != nil {
 		glog.Exitf("failed to read config: %v", err)
-	} else if cfg.MaxGetEntries > 0 {
-		ctfe.MaxGetEntriesAllowed = cfg.MaxGetEntries
 	}
 
 	glog.CopyStandardLogTo("WARNING")
@@ -154,7 +152,7 @@ func main() {
 			mux.Handle(path, handler)
 		}
 	}
-	server := http.Server{Handler: cacheHandler{mux}}
+	handler := cacheHandler{mux}
 
 	// Start listening for client requests.
 	httpList, err := net.Listen("tcp", cfg.ServerAddr)
@@ -172,7 +170,10 @@ func main() {
 	// Spin off main threads of work.
 	go metrics(metricsList)
 	go func() {
-		glog.Exit(server.Serve(httpList))
+		if cfg.CertFile == "" {
+			glog.Exit(http.ListenAndServe(cfg.ServerAddr, handler))
+		}
+		glog.Exit(http.ListenAndServeTLS(cfg.ServerAddr, cfg.CertFile, cfg.KeyFile, handler))
 	}()
 	awaitSignal()
 }

@@ -23,8 +23,10 @@ import (
 // file specifies the file format of our config. See config.dev.yml for
 // examles/annotations.
 type file struct {
-	ServerAddr  string `yaml:"server_addr"`
 	MetricsAddr string `yaml:"metrics_addr"`
+	ServerAddr  string `yaml:"server_addr"`
+	CertFile    string `yaml:"cert_file"`
+	KeyFile     string `yaml:"key_file"`
 
 	BoltPath string `yaml:"bolt_path"`
 
@@ -34,7 +36,6 @@ type file struct {
 	B2Url    string `yaml:"b2_url"`
 
 	MaxUnsequencedLeaves int64  `yaml:"max_unsequenced_leaves"`
-	MaxGetEntries        int64  `yaml:"max_get_entries"`
 	MaxClients           int    `yaml:"max_clients"`
 	RequestTimeout       string `yaml:"request_timeout"`
 
@@ -66,8 +67,10 @@ type logMeta struct {
 }
 
 type Config struct {
-	ServerAddr  string
 	MetricsAddr string
+	ServerAddr  string
+	CertFile    string
+	KeyFile     string
 
 	BoltPath string
 
@@ -77,7 +80,6 @@ type Config struct {
 	B2Url    string
 
 	MaxUnsequencedLeaves int64
-	MaxGetEntries        int64
 	MaxClients           int
 	RequestTimeout       time.Duration
 
@@ -103,10 +105,10 @@ func FromFile(path string) (*Config, error) {
 		return nil, err
 	}
 
-	if len(parsed.ServerAddr) == 0 {
-		return nil, fmt.Errorf("no address for the server to listen on was found in config file")
-	} else if len(parsed.MetricsAddr) == 0 {
+	if len(parsed.MetricsAddr) == 0 {
 		return nil, fmt.Errorf("no address to serve metrics on was found in config file")
+	} else if len(parsed.ServerAddr) == 0 {
+		return nil, fmt.Errorf("no address for the server to listen on was found in config file")
 	}
 
 	if len(parsed.BoltPath) == 0 {
@@ -123,8 +125,6 @@ func FromFile(path string) (*Config, error) {
 
 	if parsed.MaxUnsequencedLeaves < 1 {
 		return nil, fmt.Errorf("max_unsequenced_leaves must be positive")
-	} else if parsed.MaxGetEntries < 0 {
-		return nil, fmt.Errorf("max_get_entries cannot be negative")
 	} else if parsed.MaxClients < 1 {
 		return nil, fmt.Errorf("max_clients cannot be less than one")
 	}
@@ -171,18 +171,19 @@ func FromFile(path string) (*Config, error) {
 	}
 
 	return &Config{
-		ServerAddr:  parsed.ServerAddr,
 		MetricsAddr: parsed.MetricsAddr,
+		ServerAddr:  parsed.ServerAddr,
+		CertFile:    parsed.CertFile,
+		KeyFile:     parsed.KeyFile,
 
 		BoltPath: parsed.BoltPath,
 
-		B2AcctId: parsed.B2AcctId,
-		B2AppKey: parsed.B2AppKey,
-		B2Bucket: parsed.B2Bucket,
-		B2Url:    parsed.B2Url,
+		B2AcctId: os.ExpandEnv(parsed.B2AcctId),
+		B2AppKey: os.ExpandEnv(parsed.B2AppKey),
+		B2Bucket: os.ExpandEnv(parsed.B2Bucket),
+		B2Url:    os.ExpandEnv(parsed.B2Url),
 
 		MaxUnsequencedLeaves: parsed.MaxUnsequencedLeaves,
-		MaxGetEntries:        parsed.MaxGetEntries,
 		MaxClients:           parsed.MaxClients,
 		RequestTimeout:       requestTimeout,
 
