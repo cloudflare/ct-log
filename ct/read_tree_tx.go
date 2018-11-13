@@ -34,8 +34,8 @@ func (rolt *readOnlyLogTreeTX) LatestSignedLogRoot(ctx context.Context) (trillia
 
 // ReadRevision returns the tree revision that was current at the time this
 // transaction was started.
-func (rolt *readOnlyLogTreeTX) ReadRevision() int64 {
-	return rolt.root.TreeRevision
+func (rolt *readOnlyLogTreeTX) ReadRevision(ctx context.Context) (int64, error) {
+	return rolt.root.TreeRevision, nil
 }
 
 // GetSequencedLeafCount returns the total number of leaves that have been
@@ -73,7 +73,11 @@ func (rolt *readOnlyLogTreeTX) GetLeavesByIndex(ctx context.Context, indexes []i
 		}
 		nodeIds = append(nodeIds, n)
 	}
-	nodes, err := rolt.GetMerkleNodes(ctx, rolt.ReadRevision(), nodeIds)
+	rev, err := rolt.ReadRevision(ctx)
+	if err != nil {
+		return nil, err
+	}
+	nodes, err := rolt.GetMerkleNodes(ctx, rev, nodeIds)
 	if err != nil {
 		return nil, err
 	} else if len(nodes) != len(leaves) {

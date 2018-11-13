@@ -61,9 +61,7 @@ type logTreeTX struct {
 	readOnlyLogTreeTX
 	fsm
 
-	local   *custom.Local
 	localTx *custom.LocalTx
-	remote  *custom.Remote
 
 	queuedLeaves     bool
 	dequeuedChecksum []byte
@@ -71,8 +69,8 @@ type logTreeTX struct {
 
 // WriteRevision returns the tree revision that any writes through this
 // logTreeTX will be stored at.
-func (lt *logTreeTX) WriteRevision() int64 {
-	return lt.root.TreeRevision + 1
+func (lt *logTreeTX) WriteRevision(ctx context.Context) (int64, error) {
+	return lt.root.TreeRevision + 1, nil
 }
 
 // QueueLeaves enqueues leaves for later integration into the tree.
@@ -227,7 +225,11 @@ func (lt *logTreeTX) SetMerkleNodes(ctx context.Context, nodes []storage.Node) e
 	}
 
 	getSubtree := func(nID storage.NodeID) (*storagepb.SubtreeProto, error) {
-		return lt.getSubtree(ctx, lt.WriteRevision(), nID)
+		rev, err := lt.WriteRevision(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return lt.getSubtree(ctx, rev, nID)
 	}
 
 	for _, n := range nodes {
@@ -262,7 +264,11 @@ func (lt *logTreeTX) storeSubtrees(subtrees []*storagepb.SubtreeProto) error {
 		}
 		ids = append(ids, storage.NodeID{subtree.Prefix, 8 * len(subtree.Prefix)})
 	}
-	return lt.localTx.PutSubtrees(lt.treeID, lt.WriteRevision(), ids, subtrees)
+	rev, err := lt.WriteRevision(context.TODO())
+	if err != nil {
+		return err
+	}
+	return lt.localTx.PutSubtrees(lt.treeID, rev, ids, subtrees)
 }
 
 func (lt *logTreeTX) Commit() error {
