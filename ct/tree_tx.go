@@ -3,8 +3,6 @@ package ct
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/gob"
 	"fmt"
 	"time"
 
@@ -63,8 +61,7 @@ type logTreeTX struct {
 
 	localTx *custom.LocalTx
 
-	queuedLeaves     bool
-	dequeuedChecksum []byte
+	queuedLeaves bool
 }
 
 // WriteRevision returns the tree revision that any writes through this
@@ -150,23 +147,7 @@ func (lt *logTreeTX) DequeueLeaves(ctx context.Context, limit int, cutoffTime ti
 		return nil, err
 	}
 
-	leaves, err := lt.localTx.DequeueLeaves(lt.treeID, lt.root.TreeSize, cutoffTime.UnixNano(), limit)
-	if err != nil {
-		return nil, err
-	}
-
-	// Checksum the leaves that we got, so we can verify they weren't modified
-	// when we get them back in UpdateSequencedLeaves.
-	if lt.dequeuedChecksum != nil {
-		return nil, fmt.Errorf("refusing to overwrite previous dequeued checksum")
-	}
-	sum, err := checksumLeaves(leaves)
-	if err != nil {
-		return nil, err
-	}
-	lt.dequeuedChecksum = sum
-
-	return leaves, nil
+	return lt.localTx.DequeueLeaves(lt.treeID, lt.root.TreeSize, cutoffTime.UnixNano(), limit)
 }
 
 func (lt *logTreeTX) AddSequencedLeaves(ctx context.Context, leaves []*trillian.LogLeaf, ts time.Time) ([]*trillian.QueuedLogLeaf, error) {
@@ -178,21 +159,8 @@ func (lt *logTreeTX) UpdateSequencedLeaves(ctx context.Context, leaves []*trilli
 		return err
 	}
 
-	// Verify that the leaves trillian wants me to store are what I actually
-	// gave it in DequeueLeaves.
-	for _, leaf := range leaves {
-		leaf.IntegrateTimestamp = nil
-	}
-	sum, err := checksumLeaves(leaves)
-	if err != nil {
-		return err
-	} else if !bytes.Equal(lt.dequeuedChecksum, sum) {
-		return fmt.Errorf("leaf checksum does not match")
-	}
-	lt.dequeuedChecksum = nil
-
 	// Save leaves to B2.
-	err = lt.remote.PutLeaves(ctx, lt.treeID, leaves)
+	err := lt.remote.PutLeaves(ctx, lt.treeID, leaves)
 	if err != nil {
 		return err
 	}
@@ -306,12 +274,3 @@ func (lt *logTreeTX) Close() error {
 }
 
 func (lt *logTreeTX) IsOpen() bool { return !lt.closed }
-
-func checksumLeaves(in []*trillian.LogLeaf) ([]byte, error) {
-	h := sha256.New()
-	if err := gob.NewEncoder(h).Encode(in); err != nil {
-		return nil, err
-	}
-
-	return h.Sum(nil), nil
-}

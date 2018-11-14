@@ -217,8 +217,8 @@ func (l *Local) getSubtree(treeID, treeRevision int64, id storage.NodeID) (*stor
 		}
 		c := b.Cursor()
 
-		k, v := c.Seek(stop)
-		if bytes.Equal(stop, k) {
+		k, v := c.Seek(start)
+		if bytes.Equal(start, k) {
 			raw = dupSlice(v)
 			return nil
 		} else if k == nil {
@@ -226,7 +226,7 @@ func (l *Local) getSubtree(treeID, treeRevision int64, id storage.NodeID) (*stor
 		} else {
 			k, v = c.Prev()
 		}
-		if bytes.Compare(start, k) != 1 {
+		if bytes.Compare(k, stop) == 1 {
 			raw = dupSlice(v)
 		}
 
