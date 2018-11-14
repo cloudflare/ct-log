@@ -20,12 +20,16 @@ import (
 	_ "github.com/google/trillian/merkle/rfc6962"
 )
 
-var verifier merkle.LogVerifier
+var (
+	hasher   hashers.LogHasher
+	verifier merkle.LogVerifier
+)
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 
-	hasher, err := hashers.NewLogHasher(trillian.HashStrategy_RFC6962_SHA256)
+	var err error
+	hasher, err = hashers.NewLogHasher(trillian.HashStrategy_RFC6962_SHA256)
 	if err != nil {
 		panic(err)
 	}
@@ -89,8 +93,12 @@ func proofCheck(resp *ct.GetProofByHashResponse, err error) func(leafIndex, tree
 		if resp.LeafIndex != leafIndex {
 			fatalf("LeafIndex from server (%v) and LeafIndex from client (%v) do not match", resp.LeafIndex, leafIndex)
 		}
-		err := verifier.VerifyInclusionProof(resp.LeafIndex, treeSize,
-			resp.AuditPath, sh.SHA256RootHash[:], leaf)
+		leafHash, err := hasher.HashLeaf(leaf)
+		if err != nil {
+			fatalf("failed to hash leaf: %v", err)
+		}
+		err = verifier.VerifyInclusionProof(resp.LeafIndex, treeSize,
+			resp.AuditPath, sh.SHA256RootHash[:], leafHash)
 		if err != nil {
 			fatalf("failed to verify inclusion proof: %v", err)
 		}
@@ -160,8 +168,12 @@ func entryAndProofCheck(resp *ct.GetEntryAndProofResponse, err error) func(leafI
 			fatalf("received certificate with SAN %v at position %v", sans[0], leafIndex)
 		}
 
+		leafHash, err := hasher.HashLeaf(resp.LeafInput)
+		if err != nil {
+			fatalf("failed to hash leaf: %v", err)
+		}
 		err = verifier.VerifyInclusionProof(leafIndex, treeSize,
-			resp.AuditPath, sh.SHA256RootHash[:], resp.LeafInput)
+			resp.AuditPath, sh.SHA256RootHash[:], leafHash)
 		if err != nil {
 			fatalf("failed to verify inclusion proof: %v", err)
 		}
