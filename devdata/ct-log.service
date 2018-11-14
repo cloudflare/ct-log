@@ -1,0 +1,6 @@
+[Unit]
+Description=Certificate Transparency Log
+
+[Service]
+ExecStart=/go/bin/server -alsologtostderr -v=0 -cfg=/etc/ct-log/config.yaml
+Restart=always

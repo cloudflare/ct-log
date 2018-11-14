@@ -24,7 +24,7 @@ b2_bucket: ${B2_BUCKET}
 b2_url: https://f002.backblazeb2.com/file/${B2_BUCKET}
 
 # max_unsequenced_leaves is the max number of unsequenced leaves to allow before
-# refusing to accept new leaves. Recommended value is: max signing rate * 6 hrs.
+# refusing to accept new leaves. Recommended value is: 216000.
 max_unsequenced_leaves: 500
 # max_clients is the maximum number of connections that the server should accept
 # from the internet. This prevents DoS through memory exhaustion.

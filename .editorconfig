@@ -10,6 +10,6 @@ trim_trailing_whitespace = true
 indent_style = tab
 indent_size = 4
 
-[*.{toml,yml}]
+[*.{js,toml,yml}]
 indent_style = space
 indent_size = 2
