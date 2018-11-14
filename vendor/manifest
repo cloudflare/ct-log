@@ -2370,6 +2370,15 @@
 			"notests": true
 		},
 		{
+			"importpath": "golang.org/x/net/netutil",
+			"repository": "https://go.googlesource.com/net",
+			"vcs": "git",
+			"revision": "88d92db4c548972d942ac2a3531a8a9a34c82ca6",
+			"branch": "master",
+			"path": "/netutil",
+			"notests": true
+		},
+		{
 			"importpath": "golang.org/x/net/trace",
 			"repository": "https://go.googlesource.com/net",
 			"vcs": "git",

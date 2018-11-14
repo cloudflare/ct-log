@@ -12,19 +12,24 @@ import (
 	"time"
 
 	ct "github.com/google/certificate-transparency-go"
-	"github.com/google/certificate-transparency-go/merkletree"
 	"github.com/google/certificate-transparency-go/tls"
+	"github.com/google/trillian"
+	"github.com/google/trillian/merkle"
+	"github.com/google/trillian/merkle/hashers"
+
+	_ "github.com/google/trillian/merkle/rfc6962"
 )
 
-var verifier = merkletree.NewMerkleVerifier(sha256hash)
+var verifier merkle.LogVerifier
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
-}
 
-func sha256hash(data []byte) []byte {
-	hash := sha256.Sum256(data)
-	return hash[:]
+	hasher, err := hashers.NewLogHasher(trillian.HashStrategy_RFC6962_SHA256)
+	if err != nil {
+		panic(err)
+	}
+	verifier = merkle.NewLogVerifier(hasher)
 }
 
 func fatalf(format string, args ...interface{}) {

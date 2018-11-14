@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/cloudflare/ct-log/config"
 	"github.com/cloudflare/ct-log/ct"
@@ -26,10 +27,12 @@ import (
 	"github.com/google/trillian/crypto/keyspb"
 	"github.com/google/trillian/extension"
 	"github.com/google/trillian/monitoring/prometheus"
+	"github.com/google/trillian/quota"
 	"github.com/google/trillian/server"
 	"github.com/google/trillian/server/interceptor"
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/util"
+	"github.com/google/trillian/util/election"
 	"golang.org/x/net/netutil"
 
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -59,7 +62,7 @@ func init() {
 
 func main() {
 	flag.Parse()
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 
 	cfg, err := config.FromFile(*configFile)
 	if err != nil {
@@ -96,20 +99,19 @@ func main() {
 	}
 
 	// Setup the log server.
-	registry := extension.Registry{
+	serverRegistry := extension.Registry{
 		AdminStorage:  cfg.AdminStorage,
 		LogStorage:    logStorage,
 		QuotaManager:  qm,
-		MetricFactory: prometheus.MetricFactory{},
+		MetricFactory: prometheus.MetricFactory{Prefix: "server_"},
 		NewKeyProto: func(ctx context.Context, spec *keyspb.Specification) (proto.Message, error) {
 			return der.NewProtoFromSpec(spec)
 		},
 	}
-	ti := interceptor.New(registry.AdminStorage, registry.QuotaManager, false,
-		registry.MetricFactory)
+	ti := interceptor.New(serverRegistry.AdminStorage, serverRegistry.QuotaManager, false, serverRegistry.MetricFactory)
 	logServer := trillianLogClient{
 		grpc_middleware.ChainUnaryServer(interceptor.ErrorWrapper, ti.UnaryInterceptor),
-		server.NewTrillianLogRPCServer(registry, util.SystemTimeSource{}),
+		server.NewTrillianLogRPCServer(serverRegistry, util.SystemTimeSource{}),
 	}
 
 	// Setup the web server's routes.
@@ -157,7 +159,34 @@ func main() {
 			mux.Handle(path, handler)
 		}
 	}
-	server := http.Server{Handler: cacheHandler{mux}}
+	svc := http.Server{Handler: cacheHandler{mux}}
+
+	// Setup the sequencing loop. This controls both sequencing and signing.
+	signerRegistry := extension.Registry{
+		AdminStorage:    cfg.AdminStorage,
+		LogStorage:      logStorage,
+		ElectionFactory: election.NoopFactory{InstanceID: "signer"},
+		QuotaManager:    quota.Noop(),
+		MetricFactory:   prometheus.MetricFactory{Prefix: "signer_"},
+	}
+
+	sequencerManager := server.NewSequencerManager(signerRegistry, cfg.Signer.GuardWindow)
+	info := server.LogOperationInfo{
+		Registry:    signerRegistry,
+		BatchSize:   cfg.Signer.BatchSize,
+		RunInterval: cfg.Signer.RunInterval,
+		TimeSource:  util.SystemTimeSource{},
+		ElectionConfig: election.RunnerConfig{
+			PreElectionPause:    10 * time.Millisecond,
+			MasterCheckInterval: time.Second,
+			MasterHoldInterval:  (1 << 63) - 1,
+			ResignOdds:          1,
+
+			TimeSource: util.SystemTimeSource{},
+		},
+		NumWorkers: 1,
+	}
+	sequencerTask := server.NewLogOperationManager(info, sequencerManager)
 
 	// Start listening for client requests.
 	httpList, err := net.Listen("tcp", cfg.ServerAddr)
@@ -173,25 +202,33 @@ func main() {
 	}
 
 	// Spin off main threads of work.
+	go awaitSignal(cancel)
 	go metrics(qm, metricsList)
 	go func() {
 		if cfg.CertFile == "" {
-			glog.Exit(server.Serve(httpList))
+			glog.Exit(svc.Serve(httpList))
 		} else {
-			glog.Exit(server.ServeTLS(httpList, cfg.CertFile, cfg.KeyFile))
+			glog.Exit(svc.ServeTLS(httpList, cfg.CertFile, cfg.KeyFile))
 		}
 	}()
-	awaitSignal()
+	sequencerTask.OperationLoop(ctx)
+
+	// Give things a few seconds to tidy up
+	glog.Infof("Stopping server, about to exit")
+	glog.Flush()
+	time.Sleep(1 * time.Second)
 }
 
 // awaitSignal waits for standard termination signals, then exits the process.
-func awaitSignal() {
+func awaitSignal(doneFn func()) {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	sig := <-sigs
 	glog.Warningf("Signal received: %v", sig)
 	glog.Flush()
+
+	doneFn()
 }
 
 // cacheHandler sets the Cache-Control header on common, cache-able requests.
