@@ -3,9 +3,15 @@ package pop
 import "strings"
 
 // AvailableDialects lists the available database dialects
-var AvailableDialects = []string{}
+var AvailableDialects []string
 
 var dialectSynonyms = make(map[string]string)
+
+// map of dialect specific url parsers
+var urlParser = make(map[string]func(*ConnectionDetails) error)
+
+// map of dialect specific connection details finalizers
+var finalizer = make(map[string]func(*ConnectionDetails))
 
 // DialectSupported checks support for the given database dialect
 func DialectSupported(d string) bool {

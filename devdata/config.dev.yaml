@@ -8,9 +8,8 @@ server_addr: 0.0.0.0:4001
 # cert_file: ./cert.pem
 # key_file: ./key.pem
 
-# bolt_path is a directory where we'll store metadata and indices about the logs
-# in a LevelDB-type database.
-bolt_path: ./ct-data.db
+# leveldb_path is a directory where we'll store metadata and indices.
+leveldb_path: ./ct-data
 
 # b2_acct_id is the Account ID of a Backblaze B2 account. This, as well as all
 # B2-related config below, will expand environment variables at runtime.
@@ -25,7 +24,7 @@ b2_url: https://f002.backblazeb2.com/file/${B2_BUCKET}
 
 # max_unsequenced_leaves is the max number of unsequenced leaves to allow before
 # refusing to accept new leaves. Recommended value is: 216000.
-max_unsequenced_leaves: 500
+max_unsequenced_leaves: 50000000
 # max_clients is the maximum number of connections that the server should accept
 # from the internet. This prevents DoS through memory exhaustion.
 max_clients: 1024
@@ -34,7 +33,7 @@ request_timeout: 30s
 
 # Signer-specific config.
 signer:
-  batch_size: 1024  # The max number of new leaves to incorporate per STH.
+  batch_size: 10240  # The max number of new leaves to incorporate per STH.
   run_interval: 10s # How often to look for new leaves to sequence.
 
 logs:
@@ -49,7 +48,7 @@ logs:
 
     # CT config.
     prefix: # The prefix to require before the "/ct/v1/add-chain" or w/e.
-    roots_file: ./devdata/certs.dev/ca.pem
+    roots_file: ./devdata/certs.prod/ca-bundle.pem
 
     # $ openssl ecparam -name prime256v1 -genkey -noout -out log.key
     # priv_key and pub_key will also expand environment variables at runtime.

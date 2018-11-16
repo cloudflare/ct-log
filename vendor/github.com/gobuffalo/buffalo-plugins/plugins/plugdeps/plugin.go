@@ -8,10 +8,11 @@ import (
 
 // Plugin represents a Go plugin for Buffalo applications
 type Plugin struct {
-	Binary string         `toml:"binary" json:"binary"`
-	GoGet  string         `toml:"go_get,omitempty" json:"go_get,omitempty"`
-	Local  string         `toml:"local,omitempty" json:"local,omitempty"`
-	Tags   meta.BuildTags `toml:"tags,omitempty" json:"tags,omitempty"`
+	Binary   string         `toml:"binary" json:"binary"`
+	GoGet    string         `toml:"go_get,omitempty" json:"go_get,omitempty"`
+	Local    string         `toml:"local,omitempty" json:"local,omitempty"`
+	Commands []Command      `toml:"command,omitempty" json:"commands,omitempty"`
+	Tags     meta.BuildTags `toml:"tags,omitempty" json:"tags,omitempty"`
 }
 
 // String implementation of fmt.Stringer

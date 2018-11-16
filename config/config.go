@@ -28,7 +28,7 @@ type file struct {
 	CertFile    string `yaml:"cert_file"`
 	KeyFile     string `yaml:"key_file"`
 
-	BoltPath string `yaml:"bolt_path"`
+	LevelDBPath string `yaml:"leveldb_path"`
 
 	B2AcctId string `yaml:"b2_acct_id"`
 	B2AppKey string `yaml:"b2_app_key"`
@@ -72,7 +72,7 @@ type Config struct {
 	CertFile    string
 	KeyFile     string
 
-	BoltPath string
+	LevelDBPath string
 
 	B2AcctId string
 	B2AppKey string
@@ -111,8 +111,8 @@ func FromFile(path string) (*Config, error) {
 		return nil, fmt.Errorf("no address for the server to listen on was found in config file")
 	}
 
-	if len(parsed.BoltPath) == 0 {
-		return nil, fmt.Errorf("boltdb path not found in config file")
+	if len(parsed.LevelDBPath) == 0 {
+		return nil, fmt.Errorf("leveldb path not found in config file")
 	} else if len(parsed.B2AcctId) == 0 {
 		return nil, fmt.Errorf("no backblaze account id found in config file")
 	} else if len(parsed.B2AppKey) == 0 {
@@ -176,7 +176,7 @@ func FromFile(path string) (*Config, error) {
 		CertFile:    parsed.CertFile,
 		KeyFile:     parsed.KeyFile,
 
-		BoltPath: parsed.BoltPath,
+		LevelDBPath: parsed.LevelDBPath,
 
 		B2AcctId: os.ExpandEnv(parsed.B2AcctId),
 		B2AppKey: os.ExpandEnv(parsed.B2AppKey),

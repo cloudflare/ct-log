@@ -112,3 +112,12 @@ func (a *App) Decode(r io.Reader) error {
 	(*a) = xa
 	return nil
 }
+
+// PackageRoot sets the root package of the application and
+// recalculates package related values
+func (a *App) PackageRoot(pp string) {
+	a.PackagePkg = pp
+	a.ActionsPkg = pp + "/actions"
+	a.ModelsPkg = pp + "/models"
+	a.GriftsPkg = pp + "/grifts"
+}

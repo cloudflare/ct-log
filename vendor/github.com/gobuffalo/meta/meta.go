@@ -48,14 +48,11 @@ func Named(name string, root string) App {
 		Root:        root,
 		GoPath:      envy.GoPath(),
 		Name:        fname.New(name),
-		PackagePkg:  pp,
-		ActionsPkg:  pp + "/actions",
-		ModelsPkg:   pp + "/models",
-		GriftsPkg:   pp + "/grifts",
 		WithModules: envy.Mods(),
 		AsAPI:       false,
 		AsWeb:       true,
 	}
+	app.PackageRoot(pp)
 
 	app.Bin = filepath.Join("bin", app.Name.String())
 

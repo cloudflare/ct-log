@@ -11,6 +11,12 @@ import (
 )
 
 func Decorate(c Command) *cobra.Command {
+	var flags []string
+	if len(c.Flags) > 0 {
+		for _, f := range c.Flags {
+			flags = append(flags, f)
+		}
+	}
 	cc := &cobra.Command{
 		Use:     c.Name,
 		Short:   fmt.Sprintf("[PLUGIN] %s", c.Description),
@@ -27,6 +33,7 @@ func Decorate(c Command) *cobra.Command {
 			}
 
 			ax = append(ax, args...)
+			ax = append(ax, flags...)
 			ex := exec.Command(c.Binary, ax...)
 			if runtime.GOOS != "windows" {
 				ex.Env = append(envy.Environ(), "BUFFALO_PLUGIN=1")

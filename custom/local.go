@@ -9,12 +9,13 @@ import (
 
 	"github.com/cloudflare/ct-log/custom/frontier"
 
-	"github.com/etcd-io/bbolt"
 	"github.com/golang/protobuf/proto"
 	"github.com/google/trillian"
 	"github.com/google/trillian/storage"
 	"github.com/google/trillian/storage/storagepb"
 	"github.com/google/trillian/types"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 func dupSlice(in []byte) []byte {
@@ -26,20 +27,24 @@ func dupSlice(in []byte) []byte {
 	return out
 }
 
-func name(table string, treeID int64) []byte {
-	return []byte(fmt.Sprintf("%v-%v", table, treeID))
+func keyS(typ byte, treeID int64, val string) []byte {
+	return []byte(fmt.Sprintf("%s%16.16x:%v", string(typ), treeID, val))
+}
+
+func keyB(typ byte, treeID int64, val []byte) []byte {
+	return append([]byte(fmt.Sprintf("%s%16.16x:", string(typ), treeID)), val...)
 }
 
 // Local implements convenience methods over a local database connection. The
 // local database is for metadata and indices, because they're small and
 // frequently accessed.
 type Local struct {
-	db *bbolt.DB
+	db *leveldb.DB
 }
 
 // NewLocal returns a new local database, with data stored at `path`.
 func NewLocal(path string) (*Local, error) {
-	db, err := bbolt.Open(path, 0600, nil)
+	db, err := leveldb.OpenFile(path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -49,20 +54,27 @@ func NewLocal(path string) (*Local, error) {
 // MostRecentRoot returns most-recently committed root for the tree with the
 // given treeID.
 func (l *Local) MostRecentRoot(treeID int64) (trillian.SignedLogRoot, frontier.Frontier, error) {
-	var rootRaw, sig, frontRaw []byte
-	err := l.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(name("sth", treeID))
-		if b == nil {
-			return storage.ErrTreeNeedsInit
-		}
-		rootRaw = dupSlice(b.Get([]byte("root")))
-		sig = dupSlice(b.Get([]byte("sig")))
-		frontRaw = dupSlice(b.Get([]byte("frontier")))
-		return nil
-	})
+	snap, err := l.db.GetSnapshot()
 	if err != nil {
 		return trillian.SignedLogRoot{}, frontier.Frontier{}, err
 	}
+	defer snap.Release()
+
+	rootRaw, err := snap.Get(keyS('r', treeID, "root"), nil)
+	if err == leveldb.ErrNotFound {
+		return trillian.SignedLogRoot{}, frontier.Frontier{}, storage.ErrTreeNeedsInit
+	} else if err != nil {
+		return trillian.SignedLogRoot{}, frontier.Frontier{}, err
+	}
+	sig, err := snap.Get(keyS('r', treeID, "sig"), nil)
+	if err != nil {
+		return trillian.SignedLogRoot{}, frontier.Frontier{}, err
+	}
+	frontRaw, err := snap.Get(keyS('r', treeID, "frontier"), nil)
+	if err != nil {
+		return trillian.SignedLogRoot{}, frontier.Frontier{}, err
+	}
+	rootRaw, sig, frontRaw = dupSlice(rootRaw), dupSlice(sig), dupSlice(frontRaw)
 
 	root := types.LogRootV1{}
 	if err = root.UnmarshalBinary(rootRaw); err != nil {
@@ -88,45 +100,37 @@ func (l *Local) MostRecentRoot(treeID int64) (trillian.SignedLogRoot, frontier.F
 }
 
 func (l *Local) QueueLeaves(treeID, queueTimestamp int64, leaves []*trillian.LogLeaf) error {
-	return l.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(name("leaves", treeID))
-		if b == nil {
-			return storage.ErrTreeNeedsInit
+	batch := new(leveldb.Batch)
+	for _, leaf := range leaves {
+		v, err := proto.Marshal(leaf)
+		if err != nil {
+			return err
 		}
-
-		for _, leaf := range leaves {
-			key, err := rowkeyLeaf(queueTimestamp, true)
-			if err != nil {
-				return err
-			}
-			val, err := proto.Marshal(leaf)
-			if err != nil {
-				return err
-			}
-
-			if err := b.Put(key, val); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
+		batch.Put(keyB('l', treeID, rowkeyLeaf(queueTimestamp, true)), v)
+	}
+	return l.db.Write(batch, nil)
 }
 
 // Unsequenced returns the number of unsequenced leaves that a log has on disk.
 func (l *Local) Unsequenced(treeID int64) (int, error) {
-	var keys int
-
-	err := l.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(name("leaves", treeID))
-		if b == nil {
-			return storage.ErrTreeNeedsInit
-		}
-		keys = b.Stats().KeyN
-		return nil
-	})
+	snap, err := l.db.GetSnapshot()
 	if err != nil {
 		return 0, err
+	}
+	defer snap.Release()
+
+	keys := 0
+
+	iter := snap.NewIterator(&util.Range{
+		Start: keyB('l', treeID, rowkeyLeaf(0, false)),
+		Limit: keyB('l', treeID+1, rowkeyLeaf(0, false)),
+	}, nil)
+	for iter.Next() {
+		keys++
+	}
+	iter.Release()
+	if err := iter.Error(); err != nil {
+		return 0, nil
 	}
 
 	return keys, nil
@@ -136,7 +140,7 @@ func (l *Local) Unsequenced(treeID int64) (int, error) {
 // given Merkle hashes, in the tree with the given tree id. Missing sequence
 // numbers are returned as -1.
 func (l *Local) GetSequenceByMerkleHash(treeID int64, hashes [][]byte) ([]int64, error) {
-	leaves, err := l.getSequenceBy("merkle", treeID, hashes)
+	leaves, err := l.getSequenceBy('m', treeID, hashes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup by merkle hash: %v", err)
 	}
@@ -147,39 +151,35 @@ func (l *Local) GetSequenceByMerkleHash(treeID int64, hashes [][]byte) ([]int64,
 // the given identity hashes, in the tree with the given tree id. Missing
 // sequence numbers are returned as -1.
 func (l *Local) GetSequenceByIdentityHash(treeID int64, hashes [][]byte) ([]int64, error) {
-	leaves, err := l.getSequenceBy("identity", treeID, hashes)
+	leaves, err := l.getSequenceBy('i', treeID, hashes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to lookup by identity hash: %v", err)
 	}
 	return leaves, nil
 }
 
-func (l *Local) getSequenceBy(table string, treeID int64, hashes [][]byte) ([]int64, error) {
+func (l *Local) getSequenceBy(typ byte, treeID int64, hashes [][]byte) ([]int64, error) {
 	out := make([]int64, 0, len(hashes))
 
-	err := l.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(name(table, treeID))
-		if b == nil {
-			return storage.ErrTreeNeedsInit
-		}
-
-		for _, hash := range hashes {
-			raw := b.Get(hash)
-			if raw == nil {
-				out = append(out, -1)
-				continue
-			}
-			idx, n := binary.Varint(raw)
-			if n != len(raw) {
-				return fmt.Errorf("malformed entry in index")
-			}
-			out = append(out, idx)
-		}
-
-		return nil
-	})
+	snap, err := l.db.GetSnapshot()
 	if err != nil {
 		return nil, err
+	}
+	defer snap.Release()
+
+	for _, hash := range hashes {
+		raw, err := snap.Get(keyB(typ, treeID, hash), nil)
+		if err == leveldb.ErrNotFound {
+			out = append(out, -1)
+			continue
+		} else if err != nil {
+			return nil, err
+		}
+		idx, n := binary.Varint(raw)
+		if n != len(raw) {
+			return nil, fmt.Errorf("malformed entry in index")
+		}
+		out = append(out, idx)
 	}
 
 	return out, nil
@@ -207,39 +207,45 @@ func (l *Local) getSubtree(treeID, treeRevision int64, id storage.NodeID) (*stor
 	if err != nil {
 		return nil, err
 	}
+	start, stop = keyB('s', treeID, start), keyB('s', treeID, stop)
 
 	// Get the row with the equivalent rowkey or its immediate predecessor.
-	var raw []byte
-	err = l.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(name("subtrees", treeID))
-		if b == nil {
-			return storage.ErrTreeNeedsInit
-		}
-		c := b.Cursor()
-
-		k, v := c.Seek(start)
-		if bytes.Equal(start, k) {
-			raw = dupSlice(v)
-			return nil
-		} else if k == nil {
-			k, v = c.Last()
-		} else {
-			k, v = c.Prev()
-		}
-		if bytes.Compare(k, stop) == 1 {
-			raw = dupSlice(v)
-		}
-
-		return nil
-	})
+	snap, err := l.db.GetSnapshot()
 	if err != nil {
 		return nil, err
-	} else if raw == nil {
+	}
+	defer snap.Release()
+
+	iter := snap.NewIterator(nil, nil)
+
+	var k, v []byte
+	if ok := iter.Seek(start); ok {
+		if bytes.Equal(iter.Key(), start) {
+			k, v = iter.Key(), iter.Value()
+		} else if ok := iter.Prev(); ok {
+			k, v = iter.Key(), iter.Value()
+		}
+	} else if ok := iter.Last(); ok {
+		k, v = iter.Key(), iter.Value()
+	}
+	if k != nil && bytes.Compare(k, start) != 1 && bytes.Compare(k, stop) == 1 {
+		k, v = nil, dupSlice(v)
+	} else {
+		k, v = nil, nil
+	}
+
+	iter.Release()
+	if err := iter.Error(); err != nil {
+		return nil, err
+	}
+
+	// Parse the subtree, should we have found one.
+	if v == nil {
 		return nil, nil
 	}
 
 	subtree := &storagepb.SubtreeProto{}
-	if err := proto.Unmarshal(raw, subtree); err != nil {
+	if err := proto.Unmarshal(v, subtree); err != nil {
 		return nil, err
 	}
 	if subtree.Prefix == nil {
@@ -250,73 +256,47 @@ func (l *Local) getSubtree(treeID, treeRevision int64, id storage.NodeID) (*stor
 
 func (l *Local) Begin() *LocalTx {
 	return &LocalTx{
-		db:      l.db,
-		treeIDs: make(map[int64]struct{}),
+		db:    l.db,
+		batch: &leveldb.Batch{},
 	}
 }
 
 // LocalTx implements convenience methods over a transaction with the local
 // storage.
 type LocalTx struct {
-	db      *bbolt.DB
-	treeIDs map[int64]struct{}
-	acts    []func(*bbolt.Tx) error
+	db    *leveldb.DB
+	batch *leveldb.Batch
 }
 
 func (ltx *LocalTx) DequeueLeaves(treeID, seq, cutoffTime int64, limit int) ([]*trillian.LogLeaf, error) {
-	ltx.treeIDs[treeID] = struct{}{}
-
-	keys := make([][]byte, 0)
 	leaves := make([]*trillian.LogLeaf, 0)
 
-	// Read off the new leaves.
-	err := ltx.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket(name("leaves", treeID))
-		if b == nil {
-			return storage.ErrTreeNeedsInit
-		}
-		c := b.Cursor()
-
-		stop, err := rowkeyLeaf(cutoffTime+1, false)
-		if err != nil {
-			return err
-		}
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			if bytes.Compare(k, stop) != -1 {
-				break
-			} else if len(leaves) >= limit {
-				break
-			}
-			leaf := &trillian.LogLeaf{}
-			if err := proto.Unmarshal(v, leaf); err != nil {
-				return err
-			}
-
-			keys = append(keys, dupSlice(k))
-			leaves = append(leaves, leaf)
-		}
-
-		return nil
-	})
+	snap, err := ltx.db.GetSnapshot()
 	if err != nil {
 		return nil, err
 	}
+	defer snap.Release()
 
-	// Note to delete these leaves when the transaction is committed.
-	ltx.acts = append(ltx.acts, func(tx *bbolt.Tx) error {
-		b := tx.Bucket(name("leaves", treeID))
-		if b == nil {
-			return storage.ErrTreeNeedsInit
+	iter := snap.NewIterator(&util.Range{
+		Start: keyB('l', treeID, rowkeyLeaf(0, false)),
+		Limit: keyB('l', treeID+1, rowkeyLeaf(cutoffTime+1, false)),
+	}, nil)
+	for iter.Next() {
+		if len(leaves) >= limit {
+			break
+		}
+		leaf := &trillian.LogLeaf{}
+		if err := proto.Unmarshal(iter.Value(), leaf); err != nil {
+			return nil, err
 		}
 
-		for _, key := range keys {
-			if err := b.Delete(key); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
+		ltx.batch.Delete(dupSlice(iter.Key()))
+		leaves = append(leaves, leaf)
+	}
+	iter.Release()
+	if err := iter.Error(); err != nil {
+		return nil, err
+	}
 
 	return leaves, nil
 }
@@ -330,46 +310,14 @@ func (ltx *LocalTx) PutLeaves(treeID int64, seqs []int64, merkleHashes, idHashes
 	} else if len(seqs) != len(idHashes) {
 		return fmt.Errorf("different number of sequence numbers than identity hashes")
 	}
-	ltx.treeIDs[treeID] = struct{}{}
 
-	// Duplicate all these values so we don't have to worry about them changing
-	// between now and when the transaction is committed.
-	seqs2 := make([]int64, 0, len(seqs))
-	for _, seq := range seqs {
-		seqs2 = append(seqs2, seq)
+	for i, seq := range seqs {
+		raw := make([]byte, 8)
+		n := binary.PutVarint(raw, seq)
+
+		ltx.batch.Put(keyB('m', treeID, merkleHashes[i]), raw[:n])
+		ltx.batch.Put(keyB('i', treeID, idHashes[i]), raw[:n])
 	}
-	merkles2 := make([][]byte, 0, len(merkleHashes))
-	for _, hash := range merkleHashes {
-		merkles2 = append(merkles2, dupSlice(hash))
-	}
-	ids2 := make([][]byte, 0, len(idHashes))
-	for _, hash := range idHashes {
-		ids2 = append(ids2, dupSlice(hash))
-	}
-
-	ltx.acts = append(ltx.acts, func(tx *bbolt.Tx) error {
-		bMerkle := tx.Bucket(name("merkle", treeID))
-		if bMerkle == nil {
-			return storage.ErrTreeNeedsInit
-		}
-		bId := tx.Bucket(name("identity", treeID))
-		if bId == nil {
-			return storage.ErrTreeNeedsInit
-		}
-
-		for i, seq := range seqs2 {
-			raw := make([]byte, 8)
-			n := binary.PutVarint(raw, seq)
-
-			if err := bMerkle.Put(merkles2[i], raw[:n]); err != nil {
-				return err
-			} else if err := bId.Put(ids2[i], raw[:n]); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
 
 	return nil
 }
@@ -380,9 +328,7 @@ func (ltx *LocalTx) PutSubtrees(treeID, treeRevision int64, ids []storage.NodeID
 	if len(ids) != len(subtrees) {
 		return fmt.Errorf("different number of ids than subtrees")
 	}
-	ltx.treeIDs[treeID] = struct{}{}
 
-	data := make([][2][]byte, 0, len(ids))
 	for i, subtree := range subtrees {
 		rowkey, err := rowkeyNodeID(treeRevision, ids[i])
 		if err != nil {
@@ -392,90 +338,52 @@ func (ltx *LocalTx) PutSubtrees(treeID, treeRevision int64, ids []storage.NodeID
 		if err != nil {
 			return err
 		}
-		data = append(data, [2][]byte{rowkey, raw})
+		ltx.batch.Put(keyB('s', treeID, rowkey), raw)
 	}
-
-	ltx.acts = append(ltx.acts, func(tx *bbolt.Tx) error {
-		b := tx.Bucket(name("subtrees", treeID))
-		if b == nil {
-			return storage.ErrTreeNeedsInit
-		}
-
-		for _, row := range data {
-			if err := b.Put(row[0], row[1]); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
 
 	return nil
 }
 
 func (ltx *LocalTx) StoreRoot(treeID int64, root trillian.SignedLogRoot, front frontier.Frontier) error {
-	ltx.treeIDs[treeID] = struct{}{}
-
-	rootRaw := dupSlice(root.LogRoot)
-	sig := dupSlice(root.LogRootSignature)
 	frontRaw := &bytes.Buffer{}
 	if err := gob.NewEncoder(frontRaw).Encode(front); err != nil {
 		return err
 	}
 
-	ltx.acts = append(ltx.acts, func(tx *bbolt.Tx) error {
-		b := tx.Bucket(name("sth", treeID))
-		if b == nil {
-			return storage.ErrTreeNeedsInit
-		} else if err := b.Put([]byte("root"), rootRaw); err != nil {
-			return err
-		} else if err := b.Put([]byte("sig"), sig); err != nil {
-			return err
-		} else if err := b.Put([]byte("frontier"), frontRaw.Bytes()); err != nil {
-			return err
-		}
-		return nil
-	})
+	ltx.batch.Put(keyS('r', treeID, "root"), dupSlice(root.LogRoot))
+	ltx.batch.Put(keyS('r', treeID, "sig"), dupSlice(root.LogRootSignature))
+	ltx.batch.Put(keyS('r', treeID, "frontier"), frontRaw.Bytes())
 
 	return nil
 }
 
 func (ltx *LocalTx) Commit() error {
-	return ltx.db.Update(func(tx *bbolt.Tx) error {
-		// Create any buckets if necessary.
-		for _, table := range []string{"sth", "leaves", "merkle", "identity", "subtrees"} {
-			for treeID, _ := range ltx.treeIDs {
-				_, err := tx.CreateBucketIfNotExists(name(table, treeID))
-				if err != nil {
-					return err
-				}
-			}
-		}
+	tx, err := ltx.db.OpenTransaction()
+	if err != nil {
+		return err
+	} else if err := tx.Write(ltx.batch, nil); err != nil {
+		tx.Discard()
+		return err
+	} else if err := tx.Commit(); err != nil {
+		return err
+	}
 
-		// Execute queued actions in the transaction.
-		for _, act := range ltx.acts {
-			if err := act(tx); err != nil {
-				return err
-			}
-		}
-
-		// Clear the transaction to prevent it from being used again.
-		ltx.treeIDs, ltx.acts = nil, nil
-		return nil
-	})
+	// Clear the transaction to prevent it from being used again.
+	ltx.batch = nil
+	return nil
 }
 
-func rowkeyLeaf(queueTimestamp int64, noise bool) ([]byte, error) {
+func rowkeyLeaf(queueTimestamp int64, noise bool) []byte {
 	key := make([]byte, 12)
 	for i := uint(0); i < 8; i++ {
 		key[7-i] = byte(queueTimestamp >> (8 * i))
 	}
 	if noise {
 		if _, err := rand.Read(key[8:]); err != nil {
-			return nil, err
+			panic(err)
 		}
 	}
-	return key, nil
+	return key
 }
 
 func rowkeyNodeID(treeRevision int64, id storage.NodeID) ([]byte, error) {

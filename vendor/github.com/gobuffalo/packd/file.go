@@ -16,9 +16,10 @@ var _ io.Writer = &virtualFile{}
 var _ fmt.Stringer = &virtualFile{}
 
 type virtualFile struct {
-	buf  *bytes.Buffer
-	name string
-	info fileInfo
+	buf      *bytes.Buffer
+	name     string
+	info     fileInfo
+	original []byte
 }
 
 func (f virtualFile) Name() string {
@@ -33,7 +34,7 @@ func (f virtualFile) FileInfo() (os.FileInfo, error) {
 	return f.info, nil
 }
 
-func (f virtualFile) Close() error {
+func (f *virtualFile) Close() error {
 	return nil
 }
 
@@ -45,12 +46,17 @@ func (f virtualFile) Stat() (os.FileInfo, error) {
 	return f.info, nil
 }
 
-func (s *virtualFile) String() string {
-	return s.buf.String()
+func (f virtualFile) String() string {
+	return string(f.original)
 }
 
 func (s *virtualFile) Read(p []byte) (int, error) {
-	return s.buf.Read(p)
+	i, err := s.buf.Read(p)
+
+	if i == 0 || err == io.EOF {
+		s.buf = bytes.NewBuffer(s.original)
+	}
+	return i, err
 }
 
 func (s *virtualFile) Write(p []byte) (int, error) {
@@ -60,6 +66,7 @@ func (s *virtualFile) Write(p []byte) (int, error) {
 		return i, errors.WithStack(err)
 	}
 	s.buf = bb
+	s.original = bb.Bytes()
 	s.info = fileInfo{
 		Path:     s.name,
 		Contents: bb.Bytes(),
@@ -76,8 +83,9 @@ func NewFile(name string, r io.Reader) (File, error) {
 		io.Copy(bb, r)
 	}
 	return &virtualFile{
-		buf:  bb,
-		name: name,
+		buf:      bb,
+		name:     name,
+		original: bb.Bytes(),
 		info: fileInfo{
 			Path:     name,
 			Contents: bb.Bytes(),

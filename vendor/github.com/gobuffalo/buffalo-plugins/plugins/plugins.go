@@ -182,6 +182,12 @@ func listPlugDeps(app meta.App) (List, error) {
 				list[bc] = Commands{}
 			}
 			c.Binary = p.Binary
+			for _, pc := range p.Commands {
+				if c.Name == pc.Name {
+					c.Flags = pc.Flags
+					break
+				}
+			}
 			list[bc] = append(list[bc], c)
 		}
 	}

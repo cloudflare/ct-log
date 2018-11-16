@@ -6,15 +6,21 @@ import (
 
 	"github.com/gobuffalo/flect"
 	"github.com/gobuffalo/pop/nulls"
+	"github.com/gobuffalo/x/defaults"
 )
 
+// hasOneAssociation is a 1 to 1 kind of association. It's used on
+// the side the association foreign key is not defined.
+//
+// See the belongsToAssociation for the other side of the relation.
 type hasOneAssociation struct {
-	ownedModel reflect.Value
-	ownedType  reflect.Type
-	ownerID    interface{}
-	ownerName  string
-	owner      interface{}
-	fkID       string
+	ownedTableName string
+	ownedModel     reflect.Value
+	ownedType      reflect.Type
+	ownerID        interface{}
+	ownerName      string
+	owner          interface{}
+	fkID           string
 	*associationSkipable
 	*associationComposite
 }
@@ -31,14 +37,18 @@ func hasOneAssociationBuilder(p associationParams) (Association, error) {
 		skipped = true
 	}
 
+	ownerName := p.modelType.Name()
+	fk := defaults.String(p.popTags.Find("fk_id").Value, flect.Underscore(ownerName)+"_id")
+
 	fval := p.modelValue.FieldByName(p.field.Name)
 	return &hasOneAssociation{
-		owner:      p.model,
-		ownedModel: fval,
-		ownedType:  fval.Type(),
-		ownerID:    ownerID.Interface(),
-		ownerName:  p.modelType.Name(),
-		fkID:       p.popTags.Find("fk_id").Value,
+		owner:          p.model,
+		ownedTableName: flect.Pluralize(p.popTags.Find("has_one").Value),
+		ownedModel:     fval,
+		ownedType:      fval.Type(),
+		ownerID:        ownerID.Interface(),
+		ownerName:      ownerName,
+		fkID:           fk,
 		associationSkipable: &associationSkipable{
 			skipped: skipped,
 		},
@@ -59,26 +69,21 @@ func (h *hasOneAssociation) Interface() interface{} {
 	return h.ownedModel.Addr().Interface()
 }
 
-// Constraint returns the content for a where clause, and the args
+// Constraint returns the content for the WHERE clause, and the args
 // needed to execute it.
 func (h *hasOneAssociation) Constraint() (string, []interface{}) {
-	tn := flect.Underscore(h.ownerName)
-	condition := fmt.Sprintf("%s_id = ?", tn)
-	if h.fkID != "" {
-		condition = fmt.Sprintf("%s = ?", h.fkID)
-	}
-
-	return condition, []interface{}{h.ownerID}
+	return fmt.Sprintf("%s = ?", h.fkID), []interface{}{h.ownerID}
 }
 
+// AfterInterface gets the value of the model to create after
+// creating the parent model. It returns nil if its value is
+// not set.
 func (h *hasOneAssociation) AfterInterface() interface{} {
 	if h.ownedModel.Kind() == reflect.Ptr {
 		return h.ownedModel.Interface()
 	}
 
-	currentVal := h.ownedModel.Interface()
-	zeroVal := reflect.Zero(h.ownedModel.Type()).Interface()
-	if reflect.DeepEqual(zeroVal, currentVal) {
+	if IsZeroOfUnderlyingType(h.ownedModel.Interface()) {
 		return nil
 	}
 
@@ -87,8 +92,11 @@ func (h *hasOneAssociation) AfterInterface() interface{} {
 
 func (h *hasOneAssociation) AfterSetup() error {
 	ownerID := reflect.Indirect(reflect.ValueOf(h.owner)).FieldByName("ID").Interface()
-
-	fval := h.ownedModel.FieldByName(h.ownerName + "ID")
+	om := h.ownedModel
+	if om.Kind() == reflect.Ptr {
+		om = om.Elem()
+	}
+	fval := om.FieldByName(h.ownerName + "ID")
 	if fval.CanSet() {
 		if n := nulls.New(fval.Interface()); n != nil {
 			fval.Set(reflect.ValueOf(n.Parse(ownerID)))
@@ -99,4 +107,39 @@ func (h *hasOneAssociation) AfterSetup() error {
 	}
 
 	return fmt.Errorf("could not set '%s' to '%s'", ownerID, fval)
+}
+
+func (h *hasOneAssociation) AfterProcess() AssociationStatement {
+	belongingIDFieldName := "ID"
+	om := h.ownedModel
+	if om.Kind() == reflect.Ptr {
+		om = om.Elem()
+	}
+	// Skip if the related model is not set
+	if IsZeroOfUnderlyingType(om) {
+		return AssociationStatement{
+			Statement: "",
+			Args:      []interface{}{},
+		}
+	}
+	id := om.FieldByName(belongingIDFieldName).Interface()
+	if IsZeroOfUnderlyingType(id) {
+		return AssociationStatement{
+			Statement: "",
+			Args:      []interface{}{},
+		}
+	}
+
+	ownerIDFieldName := "ID"
+	ownerID := reflect.Indirect(reflect.ValueOf(h.owner)).FieldByName(ownerIDFieldName).Interface()
+
+	ids := []interface{}{ownerID}
+	ids = append(ids, id)
+
+	ret := fmt.Sprintf("UPDATE %s SET %s = ? WHERE %s = ?", h.ownedTableName, h.fkID, belongingIDFieldName)
+
+	return AssociationStatement{
+		Statement: ret,
+		Args:      ids,
+	}
 }

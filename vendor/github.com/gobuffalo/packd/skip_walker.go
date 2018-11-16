@@ -22,8 +22,9 @@ func SkipWalker(walker Walker, skipPrefixes []string, wf WalkFunc) error {
 			return errors.WithStack(err)
 		}
 
-		parts := strings.Split(path, string(filepath.Separator))
+		path = strings.Replace(path, "\\", "/", -1)
 
+		parts := strings.Split(path, "/")
 		if !fi.IsDir() {
 			parts = parts[:len(parts)-1]
 		}

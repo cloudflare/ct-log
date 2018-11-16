@@ -75,7 +75,7 @@ func (m *MemoryBox) FindString(path string) (string, error) {
 	return string(bb), err
 }
 
-func (m *MemoryBox) Find(path string) ([]byte, error) {
+func (m *MemoryBox) Find(path string) (ret []byte, e error) {
 	res, ok := m.files.Load(path)
 	if !ok {
 
@@ -98,7 +98,6 @@ func (m *MemoryBox) Find(path string) ([]byte, error) {
 		if len(b) == 0 {
 			return b, os.ErrNotExist
 		}
-
 		return b, nil
 	}
 	b, ok := res.([]byte)

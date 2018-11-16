@@ -15,6 +15,7 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"hash/crc32"
@@ -26,8 +27,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"context"
 
 	"cloud.google.com/go/internal/trace"
 	"google.golang.org/api/googleapi"
@@ -108,7 +107,7 @@ func (o *ObjectHandle) NewRangeReader(ctx context.Context, offset, length int64)
 	if err != nil {
 		return nil, err
 	}
-	req = withContext(ctx, req)
+	req = req.WithContext(ctx)
 	if o.userProject != "" {
 		req.Header.Set("X-Goog-User-Project", o.userProject)
 	}
@@ -203,7 +202,7 @@ func (o *ObjectHandle) NewRangeReader(ctx context.Context, offset, length int64)
 		// The problem with the last two cases is that the CRC will not match -- GCS
 		// computes it on the compressed contents, but we compute it on the
 		// uncompressed contents.
-		if length != 0 && !goHTTPUncompressed(res) && !uncompressedByServer(res) {
+		if length != 0 && !res.Uncompressed && !uncompressedByServer(res) {
 			crc, checkCRC = parseCRC32c(res)
 		}
 	}

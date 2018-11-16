@@ -73,7 +73,7 @@ func main() {
 	glog.Info("**** CT HTTP Server Starting ****")
 
 	// Connect to databases.
-	local, err := custom.NewLocal(cfg.BoltPath)
+	local, err := custom.NewLocal(cfg.LevelDBPath)
 	if err != nil {
 		glog.Exitf("failed to open local database: %v", err)
 	}
