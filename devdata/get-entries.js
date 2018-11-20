@@ -52,7 +52,7 @@ async function handleRequest(request) {
   }
 
   // Get the batch of raw leaf data from B2.
-  let leavesRes = await fetch(friendlyUrl + "/leaves-" + id.toString() + "/" + Math.floor(start/1024).toString())
+  let leavesRes = await fetch(friendlyUrl + "/leaves-" + id.toString() + "/" + Math.floor(start/1024).toString(16))
   if (!leavesRes.ok) {
     return new Response("failed to fetch leaves from backend",
       {status: 500, statusText: "Internal Server Error"})
