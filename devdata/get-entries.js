@@ -9,19 +9,72 @@ const friendlyUrl = "<omitted>"
 
 // ~~~ Nothing below requires modifications from the operator. ~~~
 
-function getQueryVar(search, key) {
+function getBounds(search) {
+  let start = -1, end = -1
+
   let pairs = search.substring(1).split("&")
   for (let i = 0; i < pairs.length; i++) {
     let pair = pairs[i].split("=")
-    if (decodeURIComponent(pair[0]) == key) {
-      let out = parseInt(decodeURIComponent(pair[1]), 10)
-      if (isNaN(out) || out < 0) {
-        throw new Error("failed to parse query variable")
-      }
-      return out
+
+    let key = decodeURIComponent(pair[0])
+    if (key != "start" && key != "end") {
+      continue
+    }
+    let val = parseInt(decodeURIComponent(pair[1]), 10)
+    if (isNaN(val) || val < 0) {
+      throw new Error("failed to parse query variable")
+    }
+
+    if (key == "start") {
+      start = val
+    } else if (key == "end") {
+      end = val
     }
   }
-  throw new Error("query variable not found")
+
+  if (start == -1 || end == -1) {
+    throw new Error("query variable not found")
+  }
+  return {start: start, end: end}
+}
+
+async function transformJSON(bounds, leaves, writable) {
+  let writer = writable.getWriter(), encoder = new TextEncoder()
+  function write(msg) {
+    return writer.write(encoder.encode(msg))
+  }
+  await write("{\"entries\":[")
+
+  // Manually, and very lazily parse -> re-format -> re-serialize the JSON.
+  // Actual JSON parsing/serializing is too slow to stay within CPU budget.
+  leaves = leaves.slice(1, -1).split("},{")
+
+  let startIdx = bounds.start%1024, comma = false
+  for (let i = startIdx; i < leaves.length && i-startIdx <= bounds.end-bounds.start; i++) {
+    if (comma) {
+      await write(",")
+    } else {
+      comma = true
+    }
+
+    let leaf = leaves[i]
+    if (i == 0) {
+      leaf = leaf.slice(1)
+    } else if (i == leaves.length-1) {
+      leaf = leaf.slice(0, -1)
+    }
+
+    let out = leaf.split(",")
+      .filter((part) => {
+        return part.startsWith("\"leaf_value\":") || part.startsWith("\"extra_data\":")
+      })
+      .join(",")
+      .replace("\"leaf_value\":", "\"leaf_input\":")
+    await write("{" + out + "}")
+  }
+
+  await write("]}")
+  await writer.close()
 }
 
 async function handleRequest(request) {
@@ -32,8 +85,8 @@ async function handleRequest(request) {
   if (id == null) {
     throw new Error("get-entries request for unknown log")
   }
-  let start = getQueryVar(u.search, "start"), end = getQueryVar(u.search, "end")
-  if (start > end) {
+  let bounds = getBounds(u.search)
+  if (bounds.start > bounds.end) {
     throw new Error("start index is greater than end index")
   }
 
@@ -44,26 +97,25 @@ async function handleRequest(request) {
       {status: 500, statusText: "Internal Server Error"})
   }
   let sth = await sthRes.json()
-  if (start >= sth.tree_size) {
+  if (bounds.start >= sth.tree_size) {
     return new Response("there is no leaf with that index yet",
       {status: 500, statusText: "Internal Server Error"})
-  } else if (end >= sth.tree_size) {
-    end = sth.tree_size - 1
+  } else if (bounds.end >= sth.tree_size) {
+    bounds.end = sth.tree_size - 1
   }
 
   // Get the batch of raw leaf data from B2.
-  let leavesRes = await fetch(friendlyUrl + "/leaves-" + id.toString() + "/" + Math.floor(start/1024).toString(16))
+  let leavesRes = await fetch(friendlyUrl + "/leaves-" + id.toString() + "/" + Math.floor(bounds.start/1024).toString(16))
   if (!leavesRes.ok) {
     return new Response("failed to fetch leaves from backend",
       {status: 500, statusText: "Internal Server Error"})
   }
-  let leaves = await leavesRes.json()
+  let leaves = await leavesRes.text()
 
-  let out = []
-  for (let i = start%1024; i < leaves.length && out.length <= end-start; i++) {
-    out.push({leaf_input: leaves[i].leaf_value, extra_data: leaves[i].extra_data})
-  }
-  return new Response(JSON.stringify({entries: out}))
+  let {readable, writable} = new TransformStream()
+  transformJSON(bounds, leaves, writable)
+
+  return new Response(readable)
 }
 
 addEventListener("fetch", event => {
