@@ -34,7 +34,7 @@ request_timeout: 30s
 # Signer-specific config.
 signer:
   batch_size: 10240  # The max number of new leaves to incorporate per STH.
-  run_interval: 10s # How often to look for new leaves to sequence.
+  run_interval: 10s # How often to sign a new STH. Recommended value is: 300s.
 
 logs:
   - log_id: 1 # Should not be zero.
