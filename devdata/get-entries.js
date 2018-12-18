@@ -91,7 +91,8 @@ async function handleRequest(request) {
   }
 
   // Get the STH of the log, so we know the upper bound.
-  let sthRes = await fetch("https://" + u.hostname + u.pathname.replace("get-entries", "get-sth"))
+  let tag = Math.floor((new Date()).getTime() / 10000).toString() // Don't hold on to stale STHs for too long.
+  let sthRes = await fetch("https://" + u.hostname + u.pathname.replace("get-entries", "get-sth") + "?tag=" + tag)
   if (!sthRes.ok) {
     return new Response("failed to fetch most recent sth",
       {status: 500, statusText: "Internal Server Error"})
