@@ -4,7 +4,7 @@ const logIds = {
   "/ct/v1/get-entries": 1,
 }
 // friendlyURL is the URL we should use to download from Backblaze B2, without
-// the trailing slash.
+// the trailing slash. It should likely be the same as `b2_url` in your config.
 const friendlyUrl = "<omitted>"
 
 // ~~~ Nothing below requires modifications from the operator. ~~~

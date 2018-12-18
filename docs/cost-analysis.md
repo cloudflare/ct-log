@@ -34,41 +34,41 @@ One request to each endpoint has the following impact on the underlying datastor
   - 1 read from the *Leaf Index* to detect if the certificate is a duplicate.
   - 1 write to the *Leaf Queue* to persist the user's certificate.
 
-And sequencing, which is assumed to happen every 30s, has the following effect
+And sequencing, which is assumed to happen every 300s, has the following effect
 on the underlying datastores:
 - 1 read, 1 write to the *Root Store* to update the STH.
-- 10 writes to the *Subtree Cache* to update the Merkle tree.
-- 720 random-access writes to the *Leaf Index* to index by Merkle and Identity
+- 30 writes to the *Subtree Cache* to update the Merkle tree.
+- 7200 random-access writes to the *Leaf Index* to index by Merkle and Identity
   hash.
 - 1 large sequential write to the *Leaf Store* to sequence the leaves.
-- 360 random-access reads, 360 random-access deletes from the *Leaf Queue* to
+- 3600 random-access reads, 3600 random-access deletes from the *Leaf Queue* to
   read and remove unsequenced leaves.
 
 (Where the numbers come from: There are 2 *add-chain* req/s plus 10
-*add-pre-chain* req/s, so 12 certs/s total, 360 certs = 12 certs/s &times; 30s,
-720 hashes = 360 certs &times; 2 hashes/cert)
+*add-pre-chain* req/s, so 12 certs/s total, 3600 certs = 12 certs/s &times;
+300s, 7200 hashes = 3600 certs &times; 2 hashes/cert)
 
 Datastore utilization can then be estimated as follows, assuming an existing
 corpus of 250,000,000 certificates:
 - **Root Store**
-  - 1 KB
+  - 1 kb
   - 10 read/s ; 10 kb/s
   - 0 write/s
 - **Subtree Cache**
-  - 16 GB
+  - 16 gb
   - 0 read/s ; 0 kb/s
   - 0 write/s
 - **Leaf Index**
-  - 20 GB
+  - 20 gb
   - 12 read/s ; 0 kb/s
   - 24 write/s
 - **Leaf Store**
-  - 1.5 TB
+  - 1.5 tb
   - 10 read/s ; 6 mb/s
   - 0 write/s
 - **Leaf Queue**
-  - 5 MB
-  - 12 read/s ; 74 kb/s
+  - 5 mb
+  - 12 read/s ; 72 kb/s
   - 24 write/s
 
 The egress bandwidth that was predicted for the *Leaf Store* was significantly
@@ -95,18 +95,18 @@ There are three ways that I'm aware of to store data in the cloud:
 
 DigitalOcean offers block storage in addition to VMs:
 
-| Service                 | Billing                        |
-|-------------------------|--------------------------------|
-| Minimal virtual machine | $5/month                       |
-| Download bandwidth      | $0.01/GB/month; first 1TB free |
-| Block storage allocated | $0.10/GB/month                 |
+| Service                 | Billing                         |
+|-------------------------|---------------------------------|
+| Minimal virtual machine | $5/month                        |
+| Download bandwidth      | $0.01/gb/month; first 1 tb free |
+| Block storage allocated | $0.10/gb/month                  |
 
 Backblaze has an object storage service called B2:
 
 | Service            | Billing                                               |
 |--------------------|-------------------------------------------------------|
-| Storage consumed   | $0.005/GB/month; first 10GB free                      |
-| Download bandwidth | $0.01/GB/month; first 1 GB per day free               |
+| Storage consumed   | $0.005/gb/month; first 10 gb free                     |
+| Download bandwidth | $0.01/gb/month; first 1 gb per day free               |
 | Download API call  | $0.004 per 10k req per month; first 2.5k per day free |
 
 Additionally, B2 waives the cost of download bandwidth if served through
@@ -132,11 +132,11 @@ storage?**
 - **Root Store** Block storage. This is an arbitrary decision.
 - **Subtree Cache** Block storage. This is an arbitrary decision.
 - **Leaf Index** Block storage.
-  - Block storage: We pay for 20 GB of block storage, so $2/month.
-  - Object storage: We pay for 20 GB of object storage, 12 API calls per second, so $12/month.
+  - Block storage: We pay for 20 gb of block storage, so $2/month.
+  - Object storage: We pay for 20 gb of object storage, 12 API calls per second, so $12/month.
 - **Leaf Store** Object storage.
-  - Block storage: We pay for 1.5 TB of block storage, so $154/month.
-  - Object storage: We pay for 1.5 TB of object storage, 10 API calls per second, so $18/month.
+  - Block storage: We pay for 1.5 tb of block storage, so $150/month.
+  - Object storage: We pay for 1.5 tb of object storage, 10 API calls per second, so $18/month.
 - **Leaf Queue** Block storage. Writing to object storage can take several
   seconds, which means that every *add-(pre-)chain* request would take several
   seconds, which is unacceptable.
@@ -147,7 +147,7 @@ Yes.
 
 Without the Worker, our DigitalOcean VM has to receive a get-entries request,
 download it from B2, and then upload it to Cloudflare. Paying DigitalOcean for
-the bandwidth alone would cost $145/month.
+the bandwidth alone would cost $146/month.
 
 With the Worker, get-entries requests never go to our VM and we pay $13/month to
 Cloudflare.
