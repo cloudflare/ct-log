@@ -279,7 +279,7 @@ func (ltx *LocalTx) DequeueLeaves(treeID, seq, cutoffTime int64, limit int) ([]*
 
 	iter := snap.NewIterator(&util.Range{
 		Start: keyB('l', treeID, rowkeyLeaf(0, false)),
-		Limit: keyB('l', treeID+1, rowkeyLeaf(cutoffTime+1, false)),
+		Limit: keyB('l', treeID, rowkeyLeaf(cutoffTime+1, false)),
 	}, nil)
 	for iter.Next() {
 		if len(leaves) >= limit {
