@@ -38,12 +38,8 @@ function getBounds(search) {
   return {start: start, end: end}
 }
 
-async function transformJSON(bounds, leaves, writable) {
-  let writer = writable.getWriter(), encoder = new TextEncoder()
-  function write(msg) {
-    return writer.write(encoder.encode(msg))
-  }
-  await write("{\"entries\":[")
+function transformJSON(bounds, leaves) {
+  let out = ["{\"entries\":["]
 
   // Manually, and very lazily parse -> re-format -> re-serialize the JSON.
   // Actual JSON parsing/serializing is too slow to stay within CPU budget.
@@ -52,7 +48,7 @@ async function transformJSON(bounds, leaves, writable) {
   let startIdx = bounds.start%1024, comma = false
   for (let i = startIdx; i < leaves.length && i-startIdx <= bounds.end-bounds.start; i++) {
     if (comma) {
-      await write(",")
+      out.push(",")
     } else {
       comma = true
     }
@@ -64,17 +60,17 @@ async function transformJSON(bounds, leaves, writable) {
       leaf = leaf.slice(0, -1)
     }
 
-    let out = leaf.split(",")
+    let entry = leaf.split(",")
       .filter((part) => {
         return part.startsWith("\"leaf_value\":") || part.startsWith("\"extra_data\":")
       })
       .join(",")
       .replace("\"leaf_value\":", "\"leaf_input\":")
-    await write("{" + out + "}")
+    out.push("{" + entry + "}")
   }
 
-  await write("]}")
-  await writer.close()
+  out.push("]}")
+  return out.join("")
 }
 
 async function handleRequest(request) {
@@ -113,10 +109,7 @@ async function handleRequest(request) {
   }
   let leaves = await leavesRes.text()
 
-  let {readable, writable} = new TransformStream()
-  transformJSON(bounds, leaves, writable)
-
-  return new Response(readable)
+  return new Response(transformJSON(bounds, leaves))
 }
 
 addEventListener("fetch", event => {
