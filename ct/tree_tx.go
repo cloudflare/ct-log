@@ -17,7 +17,7 @@ import (
 // leafCache stores *trillian.LogLeaf's that have been queued but may not have
 // been integrated into an STH yet. This reduces the number of duplicate leaves
 // that can be added.
-var leafCache = cache.New(1*time.Hour, 1*time.Minute, 75000)
+var leafCache = cache.New(1*time.Hour, 1*time.Minute, 37500)
 
 func dupSlice(in []byte) []byte {
 	if in == nil {
