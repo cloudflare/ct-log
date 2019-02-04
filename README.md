@@ -1,4 +1,4 @@
-Cheap/Certificate Transparency Log
+Cheap/Certificate Transparency Log [![Build Status](https://travis-ci.org/cloudflare/ct-log.svg?branch=master)](https://travis-ci.org/cloudflare/ct-log)
 ----------------------------------
 
 This repository contains code for a [Certificate Transparency
