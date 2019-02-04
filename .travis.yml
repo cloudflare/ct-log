@@ -1,4 +1,14 @@
 language: go
 go:
   - "1.11"
-script: go test -v ./...
+
+services:
+  - docker
+
+before_script:
+  - docker build -t server -f devdata/Dockerfile.travis .
+  - go install github.com/cloudflare/ct-log/cmd/admin/ct-log-tester
+
+script:
+  - go test -v ./...
+  - ./devdata/integration-test.sh

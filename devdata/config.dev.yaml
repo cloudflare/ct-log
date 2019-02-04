@@ -24,7 +24,7 @@ b2_url: https://f002.backblazeb2.com/file/${B2_BUCKET}
 
 # max_unsequenced_leaves is the max number of unsequenced leaves to allow before
 # refusing to accept new leaves. Recommended value is: 216000.
-max_unsequenced_leaves: 50000000
+max_unsequenced_leaves: 600
 # max_clients is the maximum number of connections that the server should accept
 # from the internet. This prevents DoS through memory exhaustion.
 max_clients: 1024
@@ -48,7 +48,7 @@ logs:
 
     # CT config.
     prefix: # The prefix to require before the "/ct/v1/add-chain" or w/e.
-    roots_file: ./devdata/certs.prod/ca-bundle.pem
+    roots_file: ./devdata/certs.dev/ca.pem
 
     # $ openssl ecparam -name prime256v1 -genkey -noout -out log.key
     # priv_key and pub_key will also expand environment variables at runtime.

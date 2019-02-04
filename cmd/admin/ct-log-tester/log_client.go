@@ -28,7 +28,7 @@ func (c *LogClient) WaitForSTH(ctx context.Context, treeSize uint64) *ct.SignedT
 			return sh
 		}
 
-		time.Sleep(time.Second)
+		time.Sleep(5*time.Second)
 	}
 
 	log.Fatalf("timed out waiting to read an STH with tree size %v", treeSize)
