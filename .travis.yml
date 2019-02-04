@@ -1,6 +1,12 @@
 language: go
 go:
   - "1.11"
+notifications:
+  email:
+    recipients:
+      - brendan@cloudflare.com
+    on_success: never
+    on_failure: always
 
 services:
   - docker

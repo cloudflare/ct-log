@@ -14,10 +14,15 @@ import (
 	"github.com/google/trillian/storage/storagepb"
 )
 
-// leafCache stores *trillian.LogLeaf's that have been queued but may not have
-// been integrated into an STH yet. This reduces the number of duplicate leaves
-// that can be added.
-var leafCache = cache.New(1*time.Hour, 1*time.Minute, 37500)
+// leafCache stores *trillian.LogLeaf's. See SetLeafCacheSize.
+var leafCache = cache.New(1*time.Hour, 1*time.Minute, 75000)
+
+// SetLeafCacheSize sets the max size of the in-memory cache of leaves that have
+// been queued but may not have been integrated into an STH yet. This helps
+// reduce the number of duplicate leaves.
+func SetLeafCacheSize(size int) {
+	leafCache = cache.New(1*time.Hour, 1*time.Minute, size)
+}
 
 func dupSlice(in []byte) []byte {
 	if in == nil {

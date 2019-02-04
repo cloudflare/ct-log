@@ -72,6 +72,11 @@ func main() {
 	glog.CopyStandardLogTo("WARNING")
 	glog.Info("**** CT HTTP Server Starting ****")
 
+	// Set cache size, if specified.
+	if cfg.LeafCacheSize != 0 {
+		ct.SetLeafCacheSize(cfg.LeafCacheSize)
+	}
+
 	// Connect to databases.
 	local, err := custom.NewLocal(cfg.LevelDBPath)
 	if err != nil {

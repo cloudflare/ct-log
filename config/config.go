@@ -35,6 +35,7 @@ type file struct {
 	B2Bucket string `yaml:"b2_bucket"`
 	B2Url    string `yaml:"b2_url"`
 
+	LeafCacheSize        int    `yaml:"leaf_cache_size"`
 	MaxUnsequencedLeaves int64  `yaml:"max_unsequenced_leaves"`
 	MaxClients           int    `yaml:"max_clients"`
 	RequestTimeout       string `yaml:"request_timeout"`
@@ -79,6 +80,7 @@ type Config struct {
 	B2Bucket string
 	B2Url    string
 
+	LeafCacheSize        int
 	MaxUnsequencedLeaves int64
 	MaxClients           int
 	RequestTimeout       time.Duration
@@ -123,8 +125,10 @@ func FromFile(path string) (*Config, error) {
 		return nil, fmt.Errorf("no backblaze download url found in config file")
 	}
 
-	if parsed.MaxUnsequencedLeaves < 1 {
-		return nil, fmt.Errorf("max_unsequenced_leaves must be positive")
+	if parsed.LeafCacheSize < 0 {
+		return nil, fmt.Errorf("leaf_cache_size cannot be less than zero")
+	} else if parsed.MaxUnsequencedLeaves < 1 {
+		return nil, fmt.Errorf("max_unsequenced_leaves cannot be less than one")
 	} else if parsed.MaxClients < 1 {
 		return nil, fmt.Errorf("max_clients cannot be less than one")
 	}
@@ -183,6 +187,7 @@ func FromFile(path string) (*Config, error) {
 		B2Bucket: os.ExpandEnv(parsed.B2Bucket),
 		B2Url:    os.ExpandEnv(parsed.B2Url),
 
+		LeafCacheSize:        parsed.LeafCacheSize,
 		MaxUnsequencedLeaves: parsed.MaxUnsequencedLeaves,
 		MaxClients:           parsed.MaxClients,
 		RequestTimeout:       requestTimeout,

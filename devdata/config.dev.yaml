@@ -22,6 +22,9 @@ b2_bucket: ${B2_BUCKET}
 # b2_url is the 'Friendly URL' of your B2 bucket, without the trailing slash.
 b2_url: https://f002.backblazeb2.com/file/${B2_BUCKET}
 
+# leaf_cache_size is the max size of the in-memory cache of recently submitted
+# leaves. A higher number uses more memory but reduces the chance of dups.
+leaf_cache_size: 37500
 # max_unsequenced_leaves is the max number of unsequenced leaves to allow before
 # refusing to accept new leaves. Recommended value is: 216000.
 max_unsequenced_leaves: 600
