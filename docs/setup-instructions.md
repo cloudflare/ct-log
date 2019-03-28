@@ -75,6 +75,7 @@ Production Deployment Instructions
    2. Load the unit file and try to start the service:
     ```
     # systemctl daemon-reload
+    # systemctl enable ct-log
     # systemctl start ct-log
     ```
    3. Check that the service is running and follow logs:
