@@ -15,6 +15,7 @@ import (
 	"github.com/google/trillian/storage/storagepb"
 	"github.com/google/trillian/types"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
@@ -108,7 +109,7 @@ func (l *Local) QueueLeaves(treeID, queueTimestamp int64, leaves []*trillian.Log
 		}
 		batch.Put(keyB('l', treeID, rowkeyLeaf(queueTimestamp, true)), v)
 	}
-	return l.db.Write(batch, nil)
+	return l.db.Write(batch, &opt.WriteOptions{Sync: true})
 }
 
 // Unsequenced returns the number of unsequenced leaves that a log has on disk.
@@ -361,7 +362,7 @@ func (ltx *LocalTx) Commit() error {
 	tx, err := ltx.db.OpenTransaction()
 	if err != nil {
 		return err
-	} else if err := tx.Write(ltx.batch, nil); err != nil {
+	} else if err := tx.Write(ltx.batch, &opt.WriteOptions{Sync: true}); err != nil {
 		tx.Discard()
 		return err
 	} else if err := tx.Commit(); err != nil {
